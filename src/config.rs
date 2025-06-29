@@ -1,5 +1,6 @@
 use clap::Parser;
 
+/// Configuration for the Apple Health transformer application
 #[derive(Debug, Parser)]
 #[command(name = "apple-health-transformer")]
 #[command(about = "Convert Apple Health export data to structured CSV files")]
