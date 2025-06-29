@@ -1,0 +1,17 @@
+[package]
+name = "apple-health-transformer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+quick-xml = "0.38.0"
+rayon = "1.6"
+dashmap = "6.1.0"
+csv = "1.1"
+serde = { version = "1.0", features = ["derive"] }
+zip = "4.2.0"
+anyhow = "1.0"
+thiserror = "2.0.12"
+clap = { version = "4.5.40", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11.8"
