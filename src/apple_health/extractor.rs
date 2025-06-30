@@ -12,8 +12,8 @@ use std::{
     thread,
 };
 
-// Target chunk size in bytes (1MB chunks)
-const CHUNK_SIZE: usize = 1024 * 1024;
+// Target chunk size in bytes
+const CHUNK_SIZE: usize = 2 * 1024 * 1024;
 // Buffer size for finding boundaries (should be larger than max XML element size)
 const BOUNDARY_BUFFER_SIZE: usize = 64 * 1024; // 64KB
 
