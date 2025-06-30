@@ -1,4 +1,6 @@
+use crate::core::Processable;
 use crate::error::{AppError, Result};
+use erased_serde::Serialize as ErasedSerialize;
 use quick_xml::events::BytesStart;
 use quick_xml::name::QName;
 use serde::{Serialize, Serializer};
@@ -305,6 +307,19 @@ impl RecordRow {
             RecordRow::Record(r) => r.record_type.clone(),
             RecordRow::Workout(_) => "Workout".to_string(),
             RecordRow::ActivitySummary(_) => "ActivitySummary".to_string(),
+        }
+    }
+}
+
+impl Processable for RecordRow {
+    fn grouping_key(&self) -> String {
+        self.record_type()
+    }
+    fn as_serializable(&self) -> &dyn ErasedSerialize {
+        match self {
+            RecordRow::Record(r) => r,
+            RecordRow::Workout(w) => w,
+            RecordRow::ActivitySummary(s) => s,
         }
     }
 }
