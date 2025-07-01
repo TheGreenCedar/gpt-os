@@ -12,7 +12,7 @@ mod tests {
     #[test]
     fn test_integration() {
         // Run the apple-health-transformer command with the sample export
-        let output = Command::new("target/debug/apple-health-transformer")
+        let output = Command::new("target/debug/gpt-os")
             .arg(SAMPLE_EXPORT)
             .arg(OUTPUT_ZIP)
             .output()
