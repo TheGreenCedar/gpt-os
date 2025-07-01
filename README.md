@@ -1,6 +1,8 @@
 # gpt-os
 
-`gpt-os` is a personal general data transformer built with extensibility and reusability in mind. Written in Rust, the project aims to provide a framework for transforming various personal data sources. Its first transformer focuses on Apple Health exports, converting them into structured CSV files. Processing is done in parallel to ensure efficient handling of large datasets while maintaining low memory usage.
+`gpt-os` is a personal general data transformer built with extensibility and reusability in mind. It's called gpt-os because I'm vibe coding it with Codex from my phone for the heck of it, and I'm using it to transform data that I want to add inside my chatgpt projects or want to do a deep research on.
+
+Written in Rust, the project aims to provide a framework for transforming various personal data sources. Its first transformer focuses on Apple Health exports, converting them into structured CSV files. Processing is done in parallel to ensure efficient handling of large datasets while maintaining low memory usage.
 
 ## Features
 
