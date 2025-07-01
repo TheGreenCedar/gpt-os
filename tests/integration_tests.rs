@@ -2,30 +2,83 @@
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::fs;
+    use std::io::{Read, Seek, Write};
     use std::path::Path;
-    use std::process::Command;
+
+    use assert_cmd::Command;
+    use tempfile::NamedTempFile;
+    use zip::{ZipArchive, ZipWriter, write::FileOptions};
 
     const SAMPLE_EXPORT: &str = "tests/fixtures/sample_export.xml";
-    const OUTPUT_ZIP: &str = "output.zip";
 
     #[test]
     fn test_integration() {
-        // Run the apple-health-transformer command with the sample export
-        let output = Command::new("target/debug/gpt-os")
+        let output_zip = NamedTempFile::new().expect("temp file");
+
+        Command::cargo_bin("gpt-os")
+            .expect("binary")
             .arg(SAMPLE_EXPORT)
-            .arg(OUTPUT_ZIP)
-            .output()
-            .expect("Failed to execute command");
+            .arg(output_zip.path())
+            .assert()
+            .success();
 
-        // Check if the command was successful
-        assert!(output.status.success());
+        assert!(output_zip.path().exists());
+    }
 
-        // Verify that the output ZIP file was created
-        assert!(Path::new(OUTPUT_ZIP).exists());
+    #[test]
+    fn test_zipped_input_produces_same_output() {
+        let xml_output = NamedTempFile::new().expect("temp file");
+        Command::cargo_bin("gpt-os")
+            .expect("binary")
+            .arg(SAMPLE_EXPORT)
+            .arg(xml_output.path())
+            .assert()
+            .success();
 
-        // Clean up the generated output ZIP file
-        fs::remove_file(OUTPUT_ZIP).expect("Failed to remove output ZIP file");
+        let xml_data = fs::read(SAMPLE_EXPORT).expect("read xml");
+        let mut zip_input = tempfile::Builder::new()
+            .suffix(".zip")
+            .tempfile()
+            .expect("zip input");
+        {
+            let mut writer = ZipWriter::new(&mut zip_input);
+            writer
+                .start_file("export.xml", FileOptions::<()>::default())
+                .expect("start file");
+            writer.write_all(&xml_data).expect("write");
+            writer.finish().expect("finish");
+            zip_input
+                .as_file_mut()
+                .seek(std::io::SeekFrom::Start(0))
+                .unwrap();
+        }
+
+        let zip_output = NamedTempFile::new().expect("temp file");
+        Command::cargo_bin("gpt-os")
+            .expect("binary")
+            .arg(zip_input.path())
+            .arg(zip_output.path())
+            .assert()
+            .success();
+
+        let xml_map = read_zip(xml_output.path());
+        let zip_map = read_zip(zip_output.path());
+        assert_eq!(xml_map, zip_map);
+    }
+
+    fn read_zip(path: &Path) -> HashMap<String, Vec<u8>> {
+        let file = fs::File::open(path).expect("open zip");
+        let mut archive = ZipArchive::new(file).expect("open archive");
+        let mut map = HashMap::new();
+        for i in 0..archive.len() {
+            let mut f = archive.by_index(i).expect("entry");
+            let mut data = Vec::new();
+            f.read_to_end(&mut data).expect("read");
+            map.insert(f.name().to_string(), data);
+        }
+        map
     }
 
     // Additional tests can be added here to cover more scenarios
