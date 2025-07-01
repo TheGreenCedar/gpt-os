@@ -1,6 +1,6 @@
-use gpt_os::apple_health::extractor::AppleHealthExtractor;
 use gpt_os::apple_health::types::GenericRecord;
 use gpt_os::core::Processable;
+use gpt_os::xml_utils;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
@@ -108,7 +108,7 @@ fn generic_record_grouping_key_for_record() {
 #[test]
 fn find_chunk_boundaries_basic() {
     let xml = b"<Record/><Workout/><ActivitySummary/>";
-    let boundaries = AppleHealthExtractor::find_chunk_boundaries(xml);
+    let boundaries = xml_utils::find_chunk_boundaries(xml);
     assert_eq!(boundaries, vec![0, xml.len()]);
 }
 
@@ -117,7 +117,7 @@ fn find_chunk_boundaries_multiple() {
     let element = b"<Record/>";
     let repeat = (2 * 1024 * 1024 / element.len()) + 10;
     let data = element.repeat(repeat);
-    let boundaries = AppleHealthExtractor::find_chunk_boundaries(&data);
+    let boundaries = xml_utils::find_chunk_boundaries(&data);
     assert!(boundaries.len() >= 2); // at least start and end
     assert_eq!(*boundaries.first().unwrap(), 0);
     assert_eq!(*boundaries.last().unwrap(), data.len());
@@ -126,7 +126,8 @@ fn find_chunk_boundaries_multiple() {
 #[test]
 fn process_chunk_slice_detects_types() {
     let chunk = br#"<Record type="Steps" value="1" creationDate="2020" startDate="2020" endDate="2020" sourceName="watch"/><Workout workoutActivityType="Run" duration="10" sourceName="watch" startDate="2020" endDate="2020"/><ActivitySummary dateComponents="2023-01-01"/><Correlation type="BP"/>"#;
-    let records = AppleHealthExtractor::process_chunk_slice(chunk).unwrap();
+    let parse_fn = |e: &quick_xml::events::BytesStart| GenericRecord::from_xml(e).ok();
+    let records = xml_utils::process_chunk_slice(chunk, &parse_fn).unwrap();
     assert_eq!(records.len(), 4);
     assert_eq!(records[0].element_name, "Record");
     assert_eq!(records[1].element_name, "Workout");

@@ -3,6 +3,7 @@ mod config;
 mod core;
 mod error;
 mod sinks;
+mod xml_utils;
 
 use clap::Parser;
 use log::{LevelFilter, error, info};
