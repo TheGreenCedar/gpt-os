@@ -46,6 +46,14 @@ To process an Apple Health export and generate a ZIP file with CSV outputs:
 gpt-os -v export.zip my_health_data.zip
 ```
 
+## Project Structure
+
+The repository contains the Rust source code under `src/`, tests in `tests/`, and
+additional documentation in `docs/`. Key modules include `core.rs` for the
+transformation engine, `apple_health/` for domain-specific extractors and data
+types, and `sinks/` for output implementations. A full breakdown of files and
+their roles is available in [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md).
+
 ## Testing
 
 Integration tests are included in the `tests` directory. You can run the tests using:
