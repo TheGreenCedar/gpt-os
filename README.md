@@ -66,16 +66,7 @@ cargo test
 
 ## Performance
 
-The tool is designed to handle large Apple Health exports efficiently, targeting a throughput of at least 200,000 records per second on modern hardware.
-
-## Future Work
-
-Potential enhancements include:
-
-- Direct streaming of CSV output to ZIP to reduce I/O overhead.
-- Implementation of a custom memory allocator for improved performance.
-- Additional optimizations for parsing and data handling.
-- Support for additional personal data sources through new transformer modules.
+The tool is designed to handle large Apple Health exports efficiently, targeting a throughput of at least 700,000 records per second (~6 to 12 months worth of data per second) on an 8-core, hyperthreaded CPU with an ssd.
 
 ## License
 
