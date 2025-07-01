@@ -1,6 +1,6 @@
-# apple-health-transformer
+# gpt-os
 
-`apple-health-transformer` is a high-performance, cross-platform command-line tool written in Rust that converts Apple Health export data into structured CSV files. The tool processes the data in parallel, ensuring efficient handling of large datasets while maintaining low memory usage.
+`gpt-os` is a high-performance, cross-platform command-line tool written in Rust that converts Apple Health export data into structured CSV files. The tool processes the data in parallel, ensuring efficient handling of large datasets while maintaining low memory usage.
 
 ## Features
 
@@ -23,7 +23,7 @@ cargo build --release
 The tool can be executed from the command line as follows:
 
 ```bash
-apple-health-transformer [OPTIONS] <INPUT_FILE> <OUTPUT_ZIP>
+gpt-os [OPTIONS] <INPUT_FILE> <OUTPUT_ZIP>
 ```
 
 ### Arguments
@@ -43,7 +43,7 @@ apple-health-transformer [OPTIONS] <INPUT_FILE> <OUTPUT_ZIP>
 To process an Apple Health export and generate a ZIP file with CSV outputs:
 
 ```bash
-apple-health-transformer -v export.zip my_health_data.zip
+gpt-os -v export.zip my_health_data.zip
 ```
 
 ## Testing
