@@ -1,9 +1,9 @@
-<export>
-    <ExportDate>2023-01-01T00:00:00Z</ExportDate>
-    <Me>
-        <Record type="HKQuantityTypeIdentifierBodyMass" unit="kg" value="70.5" creationDate="2023-01-01T08:00:00Z" startDate="2023-01-01T08:00:00Z" endDate="2023-01-01T08:00:00Z" />
-        <Record type="HKQuantityTypeIdentifierStepCount" unit="count" value="10000" creationDate="2023-01-01T08:00:00Z" startDate="2023-01-01T00:00:00Z" endDate="2023-01-01T23:59:59Z" />
-        <Workout type="HKWorkoutTypeIdentifierWalking" startDate="2023-01-01T09:00:00Z" endDate="2023-01-01T09:30:00Z" duration="1800" totalEnergyBurned="150" sourceName="Apple Watch" sourceVersion="8.0" device="Apple Watch Series 6" />
-        <ActivitySummary dateComponents="2023-01-01" activeEnergyBurned="300" appleExerciseTime="30" appleStandHours="12" />
-    </Me>
-</export>
+<HealthData locale="en_US">
+    <ExportDate value="2023-01-01T00:00:00Z"/>
+    <Me HKCharacteristicTypeIdentifierDateOfBirth="1990"/>
+    <Record type="HKQuantityTypeIdentifierBodyMass" unit="kg" value="70.5" creationDate="2023-01-01T08:00:00Z" startDate="2023-01-01T08:00:00Z" endDate="2023-01-01T08:00:00Z" />
+    <Record type="HKQuantityTypeIdentifierStepCount" unit="count" value="10000" creationDate="2023-01-01T08:00:00Z" startDate="2023-01-01T00:00:00Z" endDate="2023-01-01T23:59:59Z" />
+    <Workout workoutActivityType="HKWorkoutTypeIdentifierWalking" startDate="2023-01-01T09:00:00Z" endDate="2023-01-01T09:30:00Z" duration="1800" totalEnergyBurned="150" sourceName="Apple Watch" sourceVersion="8.0" device="Apple Watch Series 6" />
+    <ActivitySummary dateComponents="2023-01-01" activeEnergyBurned="300" appleExerciseTime="30" appleStandHours="12" />
+    <Correlation type="HKCorrelationTypeIdentifierBloodPressure" sourceName="Apple Watch" startDate="2023-01-01T10:00:00Z" endDate="2023-01-01T10:00:00Z" />
+</HealthData>

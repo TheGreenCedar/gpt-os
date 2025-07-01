@@ -72,6 +72,60 @@ where
     }
 }
 
+/// Generic representation for any Apple Health XML element.
+#[derive(Debug, Clone)]
+pub struct GenericRecord {
+    pub element_name: String,
+    pub attributes: std::collections::BTreeMap<String, String>,
+}
+
+impl GenericRecord {
+    pub fn from_xml(element: &BytesStart) -> Result<Self> {
+        let element_name = String::from_utf8_lossy(element.name().as_ref()).to_string();
+        let mut attributes = std::collections::BTreeMap::new();
+        for attr in element.attributes() {
+            let attr = attr
+                .map_err(|e| AppError::ParseError(format!("Failed to parse attribute: {}", e)))?;
+            let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
+            let value = extract_string_value(&attr.value);
+            attributes.insert(key, value);
+        }
+        Ok(GenericRecord {
+            element_name,
+            attributes,
+        })
+    }
+}
+
+impl Serialize for GenericRecord {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("GenericRecord", 2)?;
+        state.serialize_field("element", &self.element_name)?;
+        let attrs = serde_json::to_string(&self.attributes).map_err(serde::ser::Error::custom)?;
+        state.serialize_field("attributes", &attrs)?;
+        state.end()
+    }
+}
+
+impl Processable for GenericRecord {
+    fn grouping_key(&self) -> String {
+        if self.element_name == "Record" {
+            if let Some(typ) = self.attributes.get("type") {
+                return typ.clone();
+            }
+        }
+        self.element_name.clone()
+    }
+
+    fn as_serializable(&self) -> &dyn ErasedSerialize {
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Record {
     #[serde(rename = "type")]
@@ -289,37 +343,5 @@ impl ActivitySummary {
         }
 
         Ok(summary)
-    }
-}
-
-/// Represents any record row for CSV output
-#[derive(Debug, Clone)]
-pub enum RecordRow {
-    Record(Record),
-    Workout(Workout),
-    ActivitySummary(ActivitySummary),
-}
-
-impl RecordRow {
-    /// Get the specific record type for Record variants
-    pub fn record_type(&self) -> String {
-        match self {
-            RecordRow::Record(r) => r.record_type.clone(),
-            RecordRow::Workout(_) => "Workout".to_string(),
-            RecordRow::ActivitySummary(_) => "ActivitySummary".to_string(),
-        }
-    }
-}
-
-impl Processable for RecordRow {
-    fn grouping_key(&self) -> String {
-        self.record_type()
-    }
-    fn as_serializable(&self) -> &dyn ErasedSerialize {
-        match self {
-            RecordRow::Record(r) => r,
-            RecordRow::Workout(w) => w,
-            RecordRow::ActivitySummary(s) => s,
-        }
     }
 }

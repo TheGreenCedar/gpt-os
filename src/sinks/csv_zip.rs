@@ -20,7 +20,7 @@ where
         let start = Instant::now();
 
         // 1. Drain and filter empty groups into a Vec
-        let entries: Vec<(String, Vec<T>)> = grouped_records
+        let mut entries: Vec<(String, Vec<T>)> = grouped_records
             .into_iter()
             .filter_map(|(k, v)| {
                 if v.is_empty() {
@@ -31,6 +31,7 @@ where
                 }
             })
             .collect();
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
 
         let total_files = entries.len();
         let total_recs: usize = entries.iter().map(|(_, v)| v.len()).sum();

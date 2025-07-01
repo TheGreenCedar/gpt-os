@@ -1,8 +1,8 @@
 use memmap2::Mmap;
-use quick_xml::{Reader, events::Event, name::QName};
+use quick_xml::{Reader, events::Event};
 use rayon::prelude::*;
 
-use crate::apple_health::types::{ActivitySummary, Record, RecordRow, Workout};
+use crate::apple_health::types::GenericRecord;
 use crate::core::Extractor;
 use crate::error::{AppError, Result};
 use crossbeam_channel as channel;
@@ -11,13 +11,10 @@ use std::{fs::File, path::Path, thread};
 // Target chunk size in bytes
 const CHUNK_SIZE: usize = 2 * 1024 * 1024;
 
-// XML elements we're interested in
-const TARGET_ELEMENTS: &[&[u8]] = &[b"Record", b"Workout", b"ActivitySummary"];
-
 pub struct AppleHealthExtractor;
 
-impl Extractor<RecordRow> for AppleHealthExtractor {
-    fn extract(&self, input_path: &Path) -> Result<channel::Receiver<RecordRow>> {
+impl Extractor<GenericRecord> for AppleHealthExtractor {
+    fn extract(&self, input_path: &Path) -> Result<channel::Receiver<GenericRecord>> {
         let (sender, receiver) = channel::unbounded();
         let input_path = input_path.to_owned();
 
@@ -67,12 +64,9 @@ impl AppleHealthExtractor {
                         next_pos += 1;
                     }
 
-                    if next_pos < content_len && content[next_pos] == b'<' {
-                        // Check if this is one of our target elements
-                        if Self::is_target_element_start(&content[next_pos..]) {
-                            boundary_pos = next_pos;
-                            break;
-                        }
+                    if next_pos < content_len && Self::is_element_start(&content[next_pos..]) {
+                        boundary_pos = next_pos;
+                        break;
                     }
                 }
                 boundary_pos += 1;
@@ -93,23 +87,17 @@ impl AppleHealthExtractor {
         boundaries
     }
 
-    /// Check if the given slice starts with one of our target XML elements
-    fn is_target_element_start(data: &[u8]) -> bool {
-        for &element in TARGET_ELEMENTS {
-            let pattern = [b"<", element].concat();
-            if data.len() >= pattern.len() + 1 {
-                if data.starts_with(&pattern)
-                    && (data[pattern.len()].is_ascii_whitespace() || data[pattern.len()] == b'>')
-                {
-                    return true;
-                }
-            }
+    /// Check if the given slice starts with an XML element
+    fn is_element_start(data: &[u8]) -> bool {
+        if data.len() < 2 || data[0] != b'<' {
+            return false;
         }
-        false
+        let c = data[1];
+        c.is_ascii_alphabetic()
     }
 
     /// Process a slice of XML data containing complete elements
-    pub fn process_chunk_slice(chunk: &[u8]) -> Result<Vec<RecordRow>> {
+    pub fn process_chunk_slice(chunk: &[u8]) -> Result<Vec<GenericRecord>> {
         let mut results = Vec::new();
         let mut reader = Reader::from_reader(chunk);
         reader.config_mut().trim_text(true);
@@ -117,24 +105,11 @@ impl AppleHealthExtractor {
         let mut buf = Vec::new();
         loop {
             match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => match e.name() {
-                    QName(b"Record") => {
-                        if let Ok(record) = Record::from_xml(e) {
-                            results.push(RecordRow::Record(record));
-                        }
+                Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                    if let Ok(generic_rec) = GenericRecord::from_xml(e) {
+                        results.push(generic_rec);
                     }
-                    QName(b"Workout") => {
-                        if let Ok(workout) = Workout::from_xml(e) {
-                            results.push(RecordRow::Workout(workout));
-                        }
-                    }
-                    QName(b"ActivitySummary") => {
-                        if let Ok(summary) = ActivitySummary::from_xml(e) {
-                            results.push(RecordRow::ActivitySummary(summary));
-                        }
-                    }
-                    _ => {}
-                },
+                }
                 Ok(Event::Eof) => break,
                 Err(_) => break,
                 _ => {}
@@ -169,7 +144,7 @@ impl AppleHealthExtractor {
     }
 
     /// Process pre-split chunks and send parsed rows
-    fn process_chunks(data: &[u8], sender: &channel::Sender<RecordRow>) -> usize {
+    fn process_chunks(data: &[u8], sender: &channel::Sender<GenericRecord>) -> usize {
         let boundaries = Self::find_chunk_boundaries(data);
 
         use std::sync::{
@@ -200,7 +175,10 @@ impl AppleHealthExtractor {
     }
 
     /// Process XML file using memory-mapped I/O
-    fn process_xml_file_mmap(input_path: &Path, sender: channel::Sender<RecordRow>) -> Result<()> {
+    fn process_xml_file_mmap(
+        input_path: &Path,
+        sender: channel::Sender<GenericRecord>,
+    ) -> Result<()> {
         let file = File::open(input_path)?;
         let mmap = unsafe { Mmap::map(&file)? };
 
@@ -212,7 +190,7 @@ impl AppleHealthExtractor {
     }
 
     /// Process chunks from memory (for ZIP files)
-    fn process_memory_chunks(content: &[u8], sender: channel::Sender<RecordRow>) -> Result<()> {
+    fn process_memory_chunks(content: &[u8], sender: channel::Sender<GenericRecord>) -> Result<()> {
         let processed = Self::process_chunks(content, &sender);
 
         log::info!("Memory chunks processed: {}", processed);

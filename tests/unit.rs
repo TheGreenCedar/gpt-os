@@ -1,5 +1,6 @@
 use gpt_os::apple_health::extractor::AppleHealthExtractor;
-use gpt_os::apple_health::types::{ActivitySummary, Record, RecordRow, Workout};
+use gpt_os::apple_health::types::{ActivitySummary, GenericRecord, Record, Workout};
+use gpt_os::core::Processable;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
@@ -61,6 +62,38 @@ fn activity_summary_from_xml_numeric_fields() {
 }
 
 #[test]
+fn generic_record_from_xml() {
+    let xml = r#"<Correlation type="Blood" startDate="2020" endDate="2020"/>"#;
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    match reader.read_event_into(&mut buf).unwrap() {
+        Event::Empty(e) => {
+            let g = GenericRecord::from_xml(&e).unwrap();
+            assert_eq!(g.element_name, "Correlation");
+            assert_eq!(g.attributes.get("type").unwrap(), "Blood");
+            assert_eq!(g.attributes.get("startDate").unwrap(), "2020");
+        }
+        _ => panic!("Expected empty event"),
+    }
+}
+
+#[test]
+fn generic_record_grouping_key_for_record() {
+    let xml = r#"<Record type="HKQuantityTypeIdentifierBodyMass" value="70" startDate="2020" endDate="2020" creationDate="2020" sourceName="watch"/>"#;
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    match reader.read_event_into(&mut buf).unwrap() {
+        Event::Empty(e) => {
+            let g = GenericRecord::from_xml(&e).unwrap();
+            assert_eq!(g.grouping_key(), "HKQuantityTypeIdentifierBodyMass");
+        }
+        _ => panic!("Expected empty Record event"),
+    }
+}
+
+#[test]
 fn find_chunk_boundaries_basic() {
     let xml = b"<Record/><Workout/><ActivitySummary/>";
     let boundaries = AppleHealthExtractor::find_chunk_boundaries(xml);
@@ -80,10 +113,11 @@ fn find_chunk_boundaries_multiple() {
 
 #[test]
 fn process_chunk_slice_detects_types() {
-    let chunk = br#"<Record type="Steps" value="1" creationDate="2020" startDate="2020" endDate="2020" sourceName="watch"/><Workout workoutActivityType="Run" duration="10" sourceName="watch" startDate="2020" endDate="2020"/><ActivitySummary dateComponents="2023-01-01"/>"#;
+    let chunk = br#"<Record type="Steps" value="1" creationDate="2020" startDate="2020" endDate="2020" sourceName="watch"/><Workout workoutActivityType="Run" duration="10" sourceName="watch" startDate="2020" endDate="2020"/><ActivitySummary dateComponents="2023-01-01"/><Correlation type="BP"/>"#;
     let records = AppleHealthExtractor::process_chunk_slice(chunk).unwrap();
-    assert_eq!(records.len(), 3);
-    assert!(matches!(records[0], RecordRow::Record(_)));
-    assert!(matches!(records[1], RecordRow::Workout(_)));
-    assert!(matches!(records[2], RecordRow::ActivitySummary(_)));
+    assert_eq!(records.len(), 4);
+    assert_eq!(records[0].element_name, "Record");
+    assert_eq!(records[1].element_name, "Workout");
+    assert_eq!(records[2].element_name, "ActivitySummary");
+    assert_eq!(records[3].element_name, "Correlation");
 }
