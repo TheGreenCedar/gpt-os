@@ -1,10 +1,10 @@
 use crate::error::Result;
+use crossbeam_channel as channel;
 use dashmap::DashMap;
 use erased_serde::Serialize;
 use log::{debug, info};
 use std::fmt::Debug;
 use std::path::Path;
-use crossbeam_channel as channel;
 use std::time::Instant;
 
 /// Represents a single, processable data record.
@@ -124,13 +124,13 @@ where
 
 mod transformer {
     use super::Processable;
+    use crossbeam_channel::Receiver;
     use dashmap::DashMap;
     use log::{debug, info};
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
-    use crossbeam_channel::Receiver;
     use std::thread;
     use std::time::Instant;
 

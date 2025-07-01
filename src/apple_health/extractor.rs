@@ -1,23 +1,18 @@
-use quick_xml::{events::Event, name::QName, Reader};
-use rayon::prelude::*;
 use memmap2::Mmap;
+use quick_xml::{Reader, events::Event, name::QName};
+use rayon::prelude::*;
 
 use crate::apple_health::types::{ActivitySummary, Record, RecordRow, Workout};
 use crate::core::Extractor;
 use crate::error::{AppError, Result};
 use crossbeam_channel as channel;
-use std::{
-    fs::File,
-    path::Path,
-    thread,
-};
+use std::{fs::File, path::Path, thread};
 
 // Target chunk size in bytes
 const CHUNK_SIZE: usize = 2 * 1024 * 1024;
 
 // XML elements we're interested in
 const TARGET_ELEMENTS: &[&[u8]] = &[b"Record", b"Workout", b"ActivitySummary"];
-
 
 pub struct AppleHealthExtractor;
 
@@ -173,30 +168,36 @@ impl AppleHealthExtractor {
         }
     }
 
-
     /// Process XML file using memory-mapped I/O
-    fn process_xml_file_mmap(
-        input_path: &Path,
-        sender: channel::Sender<RecordRow>,
-    ) -> Result<()> {
+    fn process_xml_file_mmap(input_path: &Path, sender: channel::Sender<RecordRow>) -> Result<()> {
         let file = File::open(input_path)?;
         let mmap = unsafe { Mmap::map(&file)? };
 
         let boundaries = Self::find_chunk_boundaries(&mmap);
 
-        use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
         let processed = Arc::new(AtomicUsize::new(0));
 
-        boundaries.windows(2).collect::<Vec<_>>().par_iter().for_each_with((sender.clone(), Arc::clone(&processed)), |(s, count), window| {
-            let chunk = &mmap[window[0]..window[1]];
-            if let Ok(records) = Self::process_chunk_slice(chunk) {
-                for r in records {
-                    if s.send(r).is_ok() {
-                        count.fetch_add(1, Ordering::Relaxed);
+        boundaries
+            .windows(2)
+            .collect::<Vec<_>>()
+            .par_iter()
+            .for_each_with(
+                (sender.clone(), Arc::clone(&processed)),
+                |(s, count), window| {
+                    let chunk = &mmap[window[0]..window[1]];
+                    if let Ok(records) = Self::process_chunk_slice(chunk) {
+                        for r in records {
+                            if s.send(r).is_ok() {
+                                count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
                     }
-                }
-            }
-        });
+                },
+            );
 
         log::info!(
             "[extractor] Mmap chunks processed: {}",
@@ -211,20 +212,30 @@ impl AppleHealthExtractor {
         // Find chunk boundaries
         let boundaries = Self::find_chunk_boundaries(content);
 
-        use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
 
         let processed = Arc::new(AtomicUsize::new(0));
 
-        boundaries.windows(2).collect::<Vec<_>>().par_iter().for_each_with((sender.clone(), Arc::clone(&processed)), |(s, count), window| {
-            let chunk = &content[window[0]..window[1]];
-            if let Ok(records) = Self::process_chunk_slice(chunk) {
-                for r in records {
-                    if s.send(r).is_ok() {
-                        count.fetch_add(1, Ordering::Relaxed);
+        boundaries
+            .windows(2)
+            .collect::<Vec<_>>()
+            .par_iter()
+            .for_each_with(
+                (sender.clone(), Arc::clone(&processed)),
+                |(s, count), window| {
+                    let chunk = &content[window[0]..window[1]];
+                    if let Ok(records) = Self::process_chunk_slice(chunk) {
+                        for r in records {
+                            if s.send(r).is_ok() {
+                                count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
                     }
-                }
-            }
-        });
+                },
+            );
 
         log::info!(
             "[extractor] Memory chunks processed: {}",
