@@ -2,6 +2,7 @@
 
 Codex must follow these guidelines when editing this repository:
 
-1. Format Rust source files using `cargo fmt` before committing.
-2. Run the full test suite with `cargo test` and include the results in the PR description.
-
+- Format Rust source files using `cargo fmt` before committing.
+- Run the full test suite with `cargo test` and include the results in the PR description.
+- Run `cargo check` and make sure the warnings and errors are resolved
+- Don't leave any unused code
