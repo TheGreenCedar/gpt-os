@@ -1,10 +1,10 @@
 use crate::error::Result;
+use crossbeam_channel as channel;
 use dashmap::DashMap;
 use erased_serde::Serialize;
 use log::{debug, info};
 use std::fmt::Debug;
 use std::path::Path;
-use std::sync::mpsc;
 use std::time::Instant;
 
 /// Represents a single, processable data record.
@@ -18,7 +18,7 @@ pub trait Processable: Send + Sync + Debug + 'static {
 
 /// Extracts records from a data source into a channel.
 pub trait Extractor<T: Processable> {
-    fn extract(&self, input_path: &Path) -> Result<mpsc::Receiver<T>>;
+    fn extract(&self, input_path: &Path) -> Result<channel::Receiver<T>>;
 }
 
 /// Loads grouped records into a data sink.
@@ -124,12 +124,12 @@ where
 
 mod transformer {
     use super::Processable;
+    use crossbeam_channel::Receiver;
     use dashmap::DashMap;
     use log::{debug, info};
     use std::sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicUsize, Ordering},
-        mpsc::Receiver,
     };
     use std::thread;
     use std::time::Instant;
@@ -140,19 +140,18 @@ mod transformer {
     ) -> DashMap<String, Vec<T>> {
         let start_time = Instant::now();
         let grouped_records: Arc<DashMap<String, Vec<T>>> = Arc::new(DashMap::new());
-        let receiver = Arc::new(Mutex::new(receiver));
         let records_processed = Arc::new(AtomicUsize::new(0));
         let mut handles = Vec::with_capacity(num_workers);
 
         debug!("Spawning {} worker threads for transformation", num_workers);
 
         for i in 0..num_workers {
-            let receiver = Arc::clone(&receiver);
+            let rx = receiver.clone();
             let grouped_records = Arc::clone(&grouped_records);
             let records_processed = Arc::clone(&records_processed);
             handles.push(thread::spawn(move || {
                 let mut local_count = 0;
-                while let Ok(record) = receiver.lock().unwrap().recv() {
+                for record in rx.iter() {
                     grouped_records
                         .entry(record.grouping_key())
                         .or_default()
