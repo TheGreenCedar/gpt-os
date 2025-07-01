@@ -2,7 +2,7 @@ use clap::Parser;
 
 /// Configuration for the Apple Health transformer application
 #[derive(Debug, Parser)]
-#[command(name = "apple-health-transformer")]
+#[command(name = "gpt-os")]
 #[command(about = "Convert Apple Health export data to structured CSV files")]
 pub struct Config {
     /// Path to the Apple Health export (export.zip or export.xml)
