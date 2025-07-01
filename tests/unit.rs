@@ -1,5 +1,5 @@
 use gpt_os::apple_health::extractor::AppleHealthExtractor;
-use gpt_os::apple_health::types::{ActivitySummary, GenericRecord, Record, Workout};
+use gpt_os::apple_health::types::GenericRecord;
 use gpt_os::core::Processable;
 use quick_xml::Reader;
 use quick_xml::events::Event;
@@ -12,12 +12,13 @@ fn record_from_xml_optional_fields() {
     let mut buf = Vec::new();
     match reader.read_event_into(&mut buf).unwrap() {
         Event::Empty(e) => {
-            let rec = Record::from_xml(&e).unwrap();
-            assert_eq!(rec.record_type, "Heart");
-            assert_eq!(rec.value, "60");
-            assert_eq!(rec.unit, None);
-            assert_eq!(rec.source_version, None);
-            assert_eq!(rec.device, None);
+            let rec = GenericRecord::from_xml(&e).unwrap();
+            assert_eq!(rec.element_name, "Record");
+            assert_eq!(rec.attributes.get("type").unwrap(), "Heart");
+            assert_eq!(rec.attributes.get("value").unwrap(), "60");
+            assert_eq!(rec.attributes.get("unit"), None);
+            assert_eq!(rec.attributes.get("sourceVersion"), None);
+            assert_eq!(rec.attributes.get("device"), None);
         }
         _ => panic!("Expected empty Record event"),
     }
@@ -31,12 +32,16 @@ fn workout_from_xml_numeric_fields() {
     let mut buf = Vec::new();
     match reader.read_event_into(&mut buf).unwrap() {
         Event::Empty(e) => {
-            let workout = Workout::from_xml(&e).unwrap();
-            assert_eq!(workout.activity_type, "Run");
-            assert_eq!(workout.duration, 42.5);
-            assert_eq!(workout.total_distance, Some(5.2));
-            assert_eq!(workout.total_energy_burned, Some(300.0));
-            assert_eq!(workout.device, None);
+            let workout = GenericRecord::from_xml(&e).unwrap();
+            assert_eq!(workout.element_name, "Workout");
+            assert_eq!(
+                workout.attributes.get("workoutActivityType").unwrap(),
+                "Run"
+            );
+            assert_eq!(workout.attributes.get("duration").unwrap(), "42.5");
+            assert_eq!(workout.attributes.get("totalDistance").unwrap(), "5.2");
+            assert_eq!(workout.attributes.get("totalEnergyBurned").unwrap(), "300");
+            assert_eq!(workout.attributes.get("device"), None);
         }
         _ => panic!("Expected empty Workout event"),
     }
@@ -50,12 +55,19 @@ fn activity_summary_from_xml_numeric_fields() {
     let mut buf = Vec::new();
     match reader.read_event_into(&mut buf).unwrap() {
         Event::Empty(e) => {
-            let summary = ActivitySummary::from_xml(&e).unwrap();
-            assert_eq!(summary.date_components, "2023-01-01");
-            assert_eq!(summary.active_energy_burned, Some(300.0));
-            assert_eq!(summary.active_energy_burned_goal, Some(500.0));
-            assert_eq!(summary.apple_exercise_time, Some(30.0));
-            assert_eq!(summary.apple_stand_hours, Some(12.0));
+            let summary = GenericRecord::from_xml(&e).unwrap();
+            assert_eq!(summary.element_name, "ActivitySummary");
+            assert_eq!(
+                summary.attributes.get("dateComponents").unwrap(),
+                "2023-01-01"
+            );
+            assert_eq!(summary.attributes.get("activeEnergyBurned").unwrap(), "300");
+            assert_eq!(
+                summary.attributes.get("activeEnergyBurnedGoal").unwrap(),
+                "500"
+            );
+            assert_eq!(summary.attributes.get("appleExerciseTime").unwrap(), "30");
+            assert_eq!(summary.attributes.get("appleStandHours").unwrap(), "12");
         }
         _ => panic!("Expected empty ActivitySummary event"),
     }
