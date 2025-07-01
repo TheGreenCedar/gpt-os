@@ -46,7 +46,7 @@ impl Extractor<RecordRow> for AppleHealthExtractor {
 
 impl AppleHealthExtractor {
     /// Find safe chunk boundaries by looking for complete XML elements
-    fn find_chunk_boundaries(content: &[u8]) -> Vec<usize> {
+    pub fn find_chunk_boundaries(content: &[u8]) -> Vec<usize> {
         let mut boundaries = vec![0];
         let mut pos = 0;
         let content_len = content.len();
@@ -109,7 +109,7 @@ impl AppleHealthExtractor {
     }
 
     /// Process a slice of XML data containing complete elements
-    fn process_chunk_slice(chunk: &[u8]) -> Result<Vec<RecordRow>> {
+    pub fn process_chunk_slice(chunk: &[u8]) -> Result<Vec<RecordRow>> {
         let mut results = Vec::new();
         let mut reader = Reader::from_reader(chunk);
         reader.config_mut().trim_text(true);
