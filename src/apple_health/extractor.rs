@@ -189,18 +189,17 @@ impl AppleHealthExtractor {
                 (sender.clone(), Arc::clone(&processed)),
                 |(s, count), window| {
                     let chunk = &mmap[window[0]..window[1]];
+                    count.fetch_add(1, Ordering::Relaxed);
                     if let Ok(records) = Self::process_chunk_slice(chunk) {
                         for r in records {
-                            if s.send(r).is_ok() {
-                                count.fetch_add(1, Ordering::Relaxed);
-                            }
+                            let _ = s.send(r);
                         }
                     }
                 },
             );
 
         log::info!(
-            "[extractor] Mmap chunks processed: {}",
+            "Mmap chunks processed: {}",
             processed.load(Ordering::Relaxed)
         );
 
@@ -227,18 +226,17 @@ impl AppleHealthExtractor {
                 (sender.clone(), Arc::clone(&processed)),
                 |(s, count), window| {
                     let chunk = &content[window[0]..window[1]];
+                    count.fetch_add(1, Ordering::Relaxed);
                     if let Ok(records) = Self::process_chunk_slice(chunk) {
                         for r in records {
-                            if s.send(r).is_ok() {
-                                count.fetch_add(1, Ordering::Relaxed);
-                            }
+                            let _ = s.send(r);
                         }
                     }
                 },
             );
 
         log::info!(
-            "[extractor] Memory chunks processed: {}",
+            "Memory chunks processed: {}",
             processed.load(Ordering::Relaxed)
         );
 
