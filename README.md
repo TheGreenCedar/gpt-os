@@ -1,6 +1,6 @@
 # gpt-os
 
-`gpt-os` is a high-performance, cross-platform command-line tool written in Rust that converts Apple Health export data into structured CSV files. The tool processes the data in parallel, ensuring efficient handling of large datasets while maintaining low memory usage.
+`gpt-os` is a personal general data transformer built with extensibility and reusability in mind. Written in Rust, the project aims to provide a framework for transforming various personal data sources. Its first transformer focuses on Apple Health exports, converting them into structured CSV files. Processing is done in parallel to ensure efficient handling of large datasets while maintaining low memory usage.
 
 ## Features
 
@@ -65,6 +65,7 @@ Potential enhancements include:
 - Direct streaming of CSV output to ZIP to reduce I/O overhead.
 - Implementation of a custom memory allocator for improved performance.
 - Additional optimizations for parsing and data handling.
+- Support for additional personal data sources through new transformer modules.
 
 ## License
 
