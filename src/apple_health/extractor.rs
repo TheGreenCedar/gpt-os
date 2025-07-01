@@ -168,17 +168,15 @@ impl AppleHealthExtractor {
         }
     }
 
-    /// Process XML file using memory-mapped I/O
-    fn process_xml_file_mmap(input_path: &Path, sender: channel::Sender<RecordRow>) -> Result<()> {
-        let file = File::open(input_path)?;
-        let mmap = unsafe { Mmap::map(&file)? };
-
-        let boundaries = Self::find_chunk_boundaries(&mmap);
+    /// Process pre-split chunks and send parsed rows
+    fn process_chunks(data: &[u8], sender: &channel::Sender<RecordRow>) -> usize {
+        let boundaries = Self::find_chunk_boundaries(data);
 
         use std::sync::{
             Arc,
             atomic::{AtomicUsize, Ordering},
         };
+
         let processed = Arc::new(AtomicUsize::new(0));
 
         boundaries
@@ -188,7 +186,7 @@ impl AppleHealthExtractor {
             .for_each_with(
                 (sender.clone(), Arc::clone(&processed)),
                 |(s, count), window| {
-                    let chunk = &mmap[window[0]..window[1]];
+                    let chunk = &data[window[0]..window[1]];
                     count.fetch_add(1, Ordering::Relaxed);
                     if let Ok(records) = Self::process_chunk_slice(chunk) {
                         for r in records {
@@ -198,47 +196,26 @@ impl AppleHealthExtractor {
                 },
             );
 
-        log::info!(
-            "Mmap chunks processed: {}",
-            processed.load(Ordering::Relaxed)
-        );
+        processed.load(Ordering::Relaxed)
+    }
+
+    /// Process XML file using memory-mapped I/O
+    fn process_xml_file_mmap(input_path: &Path, sender: channel::Sender<RecordRow>) -> Result<()> {
+        let file = File::open(input_path)?;
+        let mmap = unsafe { Mmap::map(&file)? };
+
+        let processed = Self::process_chunks(&mmap[..], &sender);
+
+        log::info!("Mmap chunks processed: {}", processed);
 
         Ok(())
     }
 
     /// Process chunks from memory (for ZIP files)
     fn process_memory_chunks(content: &[u8], sender: channel::Sender<RecordRow>) -> Result<()> {
-        // Find chunk boundaries
-        let boundaries = Self::find_chunk_boundaries(content);
+        let processed = Self::process_chunks(content, &sender);
 
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-
-        let processed = Arc::new(AtomicUsize::new(0));
-
-        boundaries
-            .windows(2)
-            .collect::<Vec<_>>()
-            .par_iter()
-            .for_each_with(
-                (sender.clone(), Arc::clone(&processed)),
-                |(s, count), window| {
-                    let chunk = &content[window[0]..window[1]];
-                    count.fetch_add(1, Ordering::Relaxed);
-                    if let Ok(records) = Self::process_chunk_slice(chunk) {
-                        for r in records {
-                            let _ = s.send(r);
-                        }
-                    }
-                },
-            );
-
-        log::info!(
-            "Memory chunks processed: {}",
-            processed.load(Ordering::Relaxed)
-        );
+        log::info!("Memory chunks processed: {}", processed);
 
         Ok(())
     }
