@@ -61,4 +61,22 @@ impl Processable for GenericRecord {
     fn as_serializable(&self) -> &dyn ErasedSerialize {
         self
     }
+
+    fn sort_key(&self) -> Option<String> {
+        let keys = [
+            "startDate",
+            "date",
+            "dateComponents",
+            "creationDate",
+            "endDate",
+            "dateIssued",
+            "receivedDate",
+        ];
+        for k in keys {
+            if let Some(v) = self.attributes.get(k) {
+                return Some(v.clone());
+            }
+        }
+        None
+    }
 }

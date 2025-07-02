@@ -14,6 +14,11 @@ pub trait Processable: Send + Sync + Debug + 'static {
 
     /// Returns a reference to a serializable version of the record.
     fn as_serializable(&self) -> &dyn Serialize;
+
+    /// Optional key used for ordering records within groups.
+    fn sort_key(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Extracts records from a data source into a channel.

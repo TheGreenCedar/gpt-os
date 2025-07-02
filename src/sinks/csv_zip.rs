@@ -43,7 +43,8 @@ where
         // 2. Parallel CSV serialization into byte buffers
         let mini_zips: Vec<_> = entries
             .into_par_iter()
-            .map(|(name, recs)| -> Result<_> {
+            .map(|(name, mut recs)| -> Result<_> {
+                recs.sort_by_key(|r| r.sort_key().unwrap_or_default());
                 // a) build CSV in memory
                 let mut buf = Vec::with_capacity(recs.len() * 100);
                 {
