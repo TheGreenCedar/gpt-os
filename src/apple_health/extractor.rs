@@ -18,11 +18,19 @@ impl Extractor<GenericRecord> for AppleHealthExtractor {
             let result: Result<()> = (|| {
                 if input_path.extension().and_then(|s| s.to_str()) == Some("zip") {
                     // For ZIP files, we still need to extract to memory first
-                    let content = Self::extract_xml_from_zip(&input_path)?;
-                    Self::process_memory_chunks(&content, sender)?;
+                    let content = xml_utils::extract_xml_from_zip(&input_path)?;
+                    xml_utils::process_memory_chunks(
+                        &content,
+                        sender,
+                        Arc::new(Self::parse_generic),
+                    )?;
                 } else {
                     // For regular XML files, use memory-mapped processing
-                    Self::process_xml_file_mmap(&input_path, sender)?;
+                    xml_utils::process_xml_file_mmap(
+                        &input_path,
+                        sender,
+                        Arc::new(Self::parse_generic),
+                    )?;
                 }
                 Ok(())
             })();
@@ -40,20 +48,5 @@ impl Extractor<GenericRecord> for AppleHealthExtractor {
 impl AppleHealthExtractor {
     fn parse_generic(e: &BytesStart) -> Option<GenericRecord> {
         GenericRecord::from_xml(e).ok()
-    }
-
-    fn process_xml_file_mmap(
-        input_path: &Path,
-        sender: channel::Sender<GenericRecord>,
-    ) -> Result<()> {
-        xml_utils::process_xml_file_mmap(input_path, sender, Arc::new(Self::parse_generic))
-    }
-
-    fn process_memory_chunks(content: &[u8], sender: channel::Sender<GenericRecord>) -> Result<()> {
-        xml_utils::process_memory_chunks(content, sender, Arc::new(Self::parse_generic))
-    }
-
-    fn extract_xml_from_zip(input_path: &Path) -> Result<Vec<u8>> {
-        xml_utils::extract_xml_from_zip(input_path)
     }
 }
