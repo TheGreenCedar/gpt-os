@@ -1,8 +1,14 @@
+use dashmap::DashMap;
 use gpt_os::apple_health::types::GenericRecord;
-use gpt_os::core::Processable;
+use gpt_os::core::{Processable, Sink};
+use gpt_os::sinks::csv_zip::CsvZipSink;
 use gpt_os::xml_utils;
 use quick_xml::Reader;
 use quick_xml::events::Event;
+use std::fs::File;
+use std::io::Read;
+use tempfile::NamedTempFile;
+use zip::ZipArchive;
 
 #[test]
 fn record_from_xml_optional_fields() {
@@ -133,4 +139,40 @@ fn process_chunk_slice_detects_types() {
     assert_eq!(records[1].element_name, "Workout");
     assert_eq!(records[2].element_name, "ActivitySummary");
     assert_eq!(records[3].element_name, "Correlation");
+}
+
+#[test]
+fn csv_sink_sorts_records_by_date() {
+    let xml1 =
+        r#"<Record type="Steps" startDate="2023-01-02T00:00:00Z" endDate="2023-01-02T00:00:00Z"/>"#;
+    let xml2 =
+        r#"<Record type="Steps" startDate="2023-01-01T00:00:00Z" endDate="2023-01-01T00:00:00Z"/>"#;
+
+    let parse = |xml: &str| {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+        let mut buf = Vec::new();
+        match reader.read_event_into(&mut buf).unwrap() {
+            Event::Empty(e) => GenericRecord::from_xml(&e).unwrap(),
+            _ => panic!("expected empty"),
+        }
+    };
+
+    let r1 = parse(xml1);
+    let r2 = parse(xml2);
+
+    let map: DashMap<String, Vec<GenericRecord>> = DashMap::new();
+    map.entry("Steps".to_string()).or_default().extend([r1, r2]);
+
+    let tmp = NamedTempFile::new().unwrap();
+    CsvZipSink.load(map, tmp.path()).unwrap();
+
+    let file = File::open(tmp.path()).unwrap();
+    let mut archive = ZipArchive::new(file).unwrap();
+    let mut f = archive.by_index(0).unwrap();
+    let mut csv_data = String::new();
+    f.read_to_string(&mut csv_data).unwrap();
+    let lines: Vec<&str> = csv_data.lines().collect();
+    assert!(lines[1].contains("2023-01-01T00:00:00Z"));
+    assert!(lines[2].contains("2023-01-02T00:00:00Z"));
 }
