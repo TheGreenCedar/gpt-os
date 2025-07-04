@@ -1,8 +1,8 @@
 use crate::core::{Processable, Sink};
 use crate::error::Result;
+use dashmap::DashMap;
 use log::{debug, info, warn};
 use rayon::prelude::*;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Cursor, Write};
 use std::path::Path;
@@ -16,7 +16,7 @@ impl<T> Sink<T> for CsvZipSink
 where
     T: Processable + Send + Sync + 'static,
 {
-    fn load(&self, grouped_records: HashMap<String, Vec<T>>, output_path: &Path) -> Result<()> {
+    fn load(&self, grouped_records: DashMap<String, Vec<T>>, output_path: &Path) -> Result<()> {
         let start = Instant::now();
 
         // 1. Drain and filter empty groups into a Vec
