@@ -7,6 +7,7 @@ mod xml_utils;
 
 use clap::Parser;
 use log::{LevelFilter, error, info};
+use rayon::ThreadPoolBuilder;
 use std::path::Path;
 use std::process;
 
@@ -33,6 +34,11 @@ fn main() {
     let num_workers = config
         .threads
         .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |p| p.get()));
+
+    ThreadPoolBuilder::new()
+        .num_threads(num_workers)
+        .build_global()
+        .expect("Failed to initialize global thread pool");
 
     let engine = core::Engine::new(extractor, sink, num_workers);
 
