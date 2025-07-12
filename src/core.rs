@@ -1,7 +1,6 @@
 use crate::error::Result;
 use crossbeam_channel as channel;
 use dashmap::DashMap;
-use erased_serde::Serialize;
 use log::{debug, info};
 use std::fmt::Debug;
 use std::path::Path;
@@ -11,9 +10,6 @@ use std::time::Instant;
 pub trait Processable: Send + Sync + Debug + 'static {
     /// A key for grouping records, e.g., by data type.
     fn grouping_key(&self) -> String;
-
-    /// Returns a reference to a serializable version of the record.
-    fn as_serializable(&self) -> &dyn Serialize;
 
     /// Optional key used for ordering records within groups.
     fn sort_key(&self) -> Option<String> {

@@ -1,8 +1,7 @@
 use crate::core::Processable;
 use crate::error::{AppError, Result};
-use erased_serde::Serialize as ErasedSerialize;
+use crate::sinks::csv_zip::CsvWritable;
 use quick_xml::events::BytesStart;
-use serde::{Serialize, Serializer};
 
 // Helper function to extract string from attribute value
 fn extract_string_value(value: &[u8]) -> String {
@@ -34,17 +33,21 @@ impl GenericRecord {
     }
 }
 
-impl Serialize for GenericRecord {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("GenericRecord", 2)?;
-        state.serialize_field("element", &self.element_name)?;
-        let attrs = serde_json::to_string(&self.attributes).map_err(serde::ser::Error::custom)?;
-        state.serialize_field("attributes", &attrs)?;
-        state.end()
+impl CsvWritable for GenericRecord {
+    fn headers(&self) -> Vec<String> {
+        self.attributes.keys().cloned().collect()
+    }
+
+    fn write<W: std::io::Write>(
+        &self,
+        writer: &mut csv::Writer<W>,
+        headers: &[String],
+    ) -> csv::Result<()> {
+        let record: Vec<&str> = headers
+            .iter()
+            .map(|h| self.attributes.get(h).map(String::as_str).unwrap_or(""))
+            .collect();
+        writer.write_record(&record)
     }
 }
 
@@ -56,10 +59,6 @@ impl Processable for GenericRecord {
             }
         }
         self.element_name.clone()
-    }
-
-    fn as_serializable(&self) -> &dyn ErasedSerialize {
-        self
     }
 
     fn sort_key(&self) -> Option<String> {

@@ -10,11 +10,20 @@ use std::time::Instant;
 use zip::ZipArchive;
 use zip::{CompressionMethod, ZipWriter, write::FileOptions};
 
+/// Trait for writing records to a CSV writer using dynamic headers.
+pub trait CsvWritable {
+    /// Return the attribute keys used for CSV headers.
+    fn headers(&self) -> Vec<String>;
+
+    /// Write the record using the provided header ordering.
+    fn write<W: Write>(&self, writer: &mut csv::Writer<W>, headers: &[String]) -> csv::Result<()>;
+}
+
 pub struct CsvZipSink;
 
 impl<T> Sink<T> for CsvZipSink
 where
-    T: Processable + Send + Sync + 'static,
+    T: Processable + CsvWritable + Send + Sync + 'static,
 {
     fn load(&self, grouped_records: DashMap<String, Vec<T>>, output_path: &Path) -> Result<()> {
         let start = Instant::now();
@@ -44,15 +53,23 @@ where
         let mini_zips: Vec<_> = entries
             .into_par_iter()
             .map(|(name, mut recs)| -> Result<_> {
+                use std::collections::BTreeSet;
                 recs.sort_by_key(|r| r.sort_key().unwrap_or_default());
                 // a) build CSV in memory
                 let mut buf = Vec::with_capacity(recs.len() * 100);
                 {
+                    let mut header_set = BTreeSet::new();
+                    for r in &recs {
+                        header_set.extend(r.headers());
+                    }
+                    let headers: Vec<String> = header_set.into_iter().collect();
+
                     let mut w = csv::WriterBuilder::new()
                         .has_headers(true)
                         .from_writer(&mut buf);
+                    w.write_record(&headers)?;
                     for r in &recs {
-                        w.serialize(r.as_serializable())?;
+                        r.write(&mut w, &headers)?;
                     }
                     w.flush()?;
                 }
