@@ -39,12 +39,12 @@ impl Serialize for GenericRecord {
     where
         S: Serializer,
     {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("GenericRecord", 2)?;
-        state.serialize_field("element", &self.element_name)?;
-        let attrs = serde_json::to_string(&self.attributes).map_err(serde::ser::Error::custom)?;
-        state.serialize_field("attributes", &attrs)?;
-        state.end()
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(self.attributes.len()))?;
+        for (k, v) in &self.attributes {
+            map.serialize_entry(k, v)?;
+        }
+        map.end()
     }
 }
 

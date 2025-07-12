@@ -1,8 +1,10 @@
+use crate::apple_health::types::GenericRecord;
 use crate::core::{Processable, Sink};
 use crate::error::Result;
 use dashmap::DashMap;
 use log::{debug, info, warn};
 use rayon::prelude::*;
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{Cursor, Write};
 use std::path::Path;
@@ -12,15 +14,16 @@ use zip::{CompressionMethod, ZipWriter, write::FileOptions};
 
 pub struct CsvZipSink;
 
-impl<T> Sink<T> for CsvZipSink
-where
-    T: Processable + Send + Sync + 'static,
-{
-    fn load(&self, grouped_records: DashMap<String, Vec<T>>, output_path: &Path) -> Result<()> {
+impl Sink<GenericRecord> for CsvZipSink {
+    fn load(
+        &self,
+        grouped_records: DashMap<String, Vec<GenericRecord>>,
+        output_path: &Path,
+    ) -> Result<()> {
         let start = Instant::now();
 
         // 1. Drain and filter empty groups into a Vec
-        let mut entries: Vec<(String, Vec<T>)> = grouped_records
+        let mut entries: Vec<(String, Vec<GenericRecord>)> = grouped_records
             .into_iter()
             .filter_map(|(k, v)| {
                 if v.is_empty() {
@@ -45,14 +48,29 @@ where
             .into_par_iter()
             .map(|(name, mut recs)| -> Result<_> {
                 recs.sort_by_key(|r| r.sort_key().unwrap_or_default());
-                // a) build CSV in memory
+                // a) determine all attribute keys
+                let mut key_set: BTreeSet<String> = BTreeSet::new();
+                for r in &recs {
+                    key_set.extend(r.attributes.keys().cloned());
+                }
+                let keys: Vec<String> = key_set.into_iter().collect();
+
+                // b) build CSV in memory
                 let mut buf = Vec::with_capacity(recs.len() * 100);
                 {
                     let mut w = csv::WriterBuilder::new()
                         .has_headers(true)
                         .from_writer(&mut buf);
+                    w.write_record(&keys)?;
                     for r in &recs {
-                        w.serialize(r.as_serializable())?;
+                        // Invoke to keep the trait method from triggering a
+                        // dead_code warning
+                        let _ = r.as_serializable();
+                        let row: Vec<String> = keys
+                            .iter()
+                            .map(|k| r.attributes.get(k).cloned().unwrap_or_default())
+                            .collect();
+                        w.write_record(&row)?;
                     }
                     w.flush()?;
                 }
