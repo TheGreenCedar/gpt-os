@@ -165,7 +165,11 @@ fn csv_sink_sorts_records_by_date() {
     map.entry("Steps".to_string()).or_default().extend([r1, r2]);
 
     let tmp = NamedTempFile::new().unwrap();
-    CsvZipSink.load(map, tmp.path(), 1).unwrap();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    pool.install(|| CsvZipSink.load(map, tmp.path())).unwrap();
 
     let file = File::open(tmp.path()).unwrap();
     let mut archive = ZipArchive::new(file).unwrap();
