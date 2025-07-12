@@ -1,9 +1,9 @@
-use crate::apple_health::types::GenericRecord;
 use crate::core::{Processable, Sink};
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use dashmap::DashMap;
 use log::{debug, info, warn};
 use rayon::prelude::*;
+use serde_json;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -14,16 +14,15 @@ use zip::{CompressionMethod, ZipWriter, write::FileOptions};
 
 pub struct CsvZipSink;
 
-impl Sink<GenericRecord> for CsvZipSink {
-    fn load(
-        &self,
-        grouped_records: DashMap<String, Vec<GenericRecord>>,
-        output_path: &Path,
-    ) -> Result<()> {
+impl<T> Sink<T> for CsvZipSink
+where
+    T: Processable,
+{
+    fn load(&self, grouped_records: DashMap<String, Vec<T>>, output_path: &Path) -> Result<()> {
         let start = Instant::now();
 
         // 1. Drain and filter empty groups into a Vec
-        let mut entries: Vec<(String, Vec<GenericRecord>)> = grouped_records
+        let mut entries: Vec<(String, Vec<T>)> = grouped_records
             .into_iter()
             .filter_map(|(k, v)| {
                 if v.is_empty() {
@@ -51,7 +50,11 @@ impl Sink<GenericRecord> for CsvZipSink {
                 // a) determine all attribute keys
                 let mut key_set: BTreeSet<String> = BTreeSet::new();
                 for r in &recs {
-                    key_set.extend(r.attributes.keys().cloned());
+                    let value = serde_json::to_value(r.as_serializable())
+                        .map_err(|e| AppError::Unknown(e.to_string()))?;
+                    if let serde_json::Value::Object(map) = value {
+                        key_set.extend(map.keys().cloned());
+                    }
                 }
                 let keys: Vec<String> = key_set.into_iter().collect();
 
@@ -63,13 +66,20 @@ impl Sink<GenericRecord> for CsvZipSink {
                         .from_writer(&mut buf);
                     w.write_record(&keys)?;
                     for r in &recs {
-                        // Invoke to keep the trait method from triggering a
-                        // dead_code warning
-                        let _ = r.as_serializable();
-                        let row: Vec<String> = keys
-                            .iter()
-                            .map(|k| r.attributes.get(k).cloned().unwrap_or_default())
-                            .collect();
+                        let value = serde_json::to_value(r.as_serializable())
+                            .map_err(|e| AppError::Unknown(e.to_string()))?;
+                        let row: Vec<String> = match value {
+                            serde_json::Value::Object(map) => keys
+                                .iter()
+                                .map(|k| {
+                                    map.get(k)
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or_default()
+                                        .to_string()
+                                })
+                                .collect(),
+                            _ => keys.iter().map(|_| String::new()).collect(),
+                        };
                         w.write_record(&row)?;
                     }
                     w.flush()?;
