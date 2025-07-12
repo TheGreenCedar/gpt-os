@@ -1,8 +1,8 @@
 use crate::core::{Processable, Sink};
 use crate::error::Result;
-use dashmap::DashMap;
 use log::{debug, info, warn};
-use rayon::prelude::*;
+use rayon::{ThreadPoolBuilder, prelude::*};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Cursor, Write};
 use std::path::Path;
@@ -25,7 +25,12 @@ impl<T> Sink<T> for CsvZipSink
 where
     T: Processable + CsvWritable + Send + Sync + 'static,
 {
-    fn load(&self, grouped_records: DashMap<String, Vec<T>>, output_path: &Path) -> Result<()> {
+    fn load(
+        &self,
+        grouped_records: HashMap<String, Vec<T>>,
+        output_path: &Path,
+        threads: usize,
+    ) -> Result<()> {
         let start = Instant::now();
 
         // 1. Drain and filter empty groups into a Vec
@@ -49,47 +54,50 @@ where
             total_files, total_recs
         );
 
-        // 2. Parallel CSV serialization into byte buffers
-        let mini_zips: Vec<_> = entries
-            .into_par_iter()
-            .map(|(name, mut recs)| -> Result<_> {
-                use std::collections::BTreeSet;
-                recs.sort_by_key(|r| r.sort_key().unwrap_or_default());
-                // a) build CSV in memory
-                let mut buf = Vec::with_capacity(recs.len() * 100);
-                {
-                    let mut header_set = BTreeSet::new();
-                    for r in &recs {
-                        header_set.extend(r.headers());
-                    }
-                    let headers: Vec<String> = header_set.into_iter().collect();
+        // 2. Parallel CSV serialization into byte buffers using a dedicated thread pool
+        let pool = ThreadPoolBuilder::new().num_threads(threads).build()?;
+        let mini_zips: Vec<_> = pool.install(|| {
+            entries
+                .into_par_iter()
+                .map(|(name, mut recs)| -> Result<_> {
+                    use std::collections::BTreeSet;
+                    recs.sort_by_key(|r| r.sort_key().unwrap_or_default());
+                    // a) build CSV in memory
+                    let mut buf = Vec::with_capacity(recs.len() * 100);
+                    {
+                        let mut header_set = BTreeSet::new();
+                        for r in &recs {
+                            header_set.extend(r.headers());
+                        }
+                        let headers: Vec<String> = header_set.into_iter().collect();
 
-                    let mut w = csv::WriterBuilder::new()
-                        .has_headers(true)
-                        .from_writer(&mut buf);
-                    w.write_record(&headers)?;
-                    for r in &recs {
-                        r.write(&mut w, &headers)?;
+                        let mut w = csv::WriterBuilder::new()
+                            .has_headers(true)
+                            .from_writer(&mut buf);
+                        w.write_record(&headers)?;
+                        for r in &recs {
+                            r.write(&mut w, &headers)?;
+                        }
+                        w.flush()?;
                     }
-                    w.flush()?;
-                }
-                debug!("CSV for '{}' is {} bytes", name, buf.len());
+                    debug!("CSV for '{}' is {} bytes", name, buf.len());
 
-                // b) wrap in a 1-entry ZIP
-                let mut cursor = Cursor::new(Vec::with_capacity(buf.len() / 3));
-                {
-                    let mut mini = ZipWriter::new(&mut cursor);
-                    let opts = FileOptions::<()>::default()
-                        .compression_method(CompressionMethod::Deflated)
-                        .unix_permissions(0o644);
-                    mini.start_file(format!("{}.csv", &name), opts)?;
-                    mini.write_all(&buf)?;
-                    mini.finish()?;
-                }
-                cursor.set_position(0);
-                Ok((name, cursor))
-            })
-            .collect::<Result<_>>()?;
+                    // b) wrap in a 1-entry ZIP
+                    let mut cursor = Cursor::new(Vec::with_capacity(buf.len() / 3));
+                    {
+                        let mut mini = ZipWriter::new(&mut cursor);
+                        let opts = FileOptions::<()>::default()
+                            .compression_method(CompressionMethod::Deflated)
+                            .unix_permissions(0o644);
+                        mini.start_file(format!("{}.csv", &name), opts)?;
+                        mini.write_all(&buf)?;
+                        mini.finish()?;
+                    }
+                    cursor.set_position(0);
+                    Ok((name, cursor))
+                })
+                .collect::<Result<_>>()
+        })?;
 
         // 3. Merge them into the final ZIP
         let mut out = File::create(output_path)?;

@@ -39,6 +39,8 @@ The project is built around a generic transformation engine defined in `src/core
 
 The command-line interface in `src/main.rs` wires these pieces together using `Config` from `src/config.rs`. Logging and error handling are provided by `env_logger` and the custom `error` module.
 
+Parallelism is handled using dedicated Rayon thread pools for each phase of the ETL pipeline. The number of threads for extraction, transformation and loading can be configured via CLI options, with sensible defaults based on the available hardware.
+
 ```
 Flow: Extractor -> Engine -> Sink
 ```

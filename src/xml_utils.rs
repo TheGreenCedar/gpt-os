@@ -121,7 +121,7 @@ where
 /// Process XML file using memory-mapped I/O
 pub fn process_xml_file_mmap<T>(
     input_path: &Path,
-    sender: channel::Sender<T>,
+    sender: &channel::Sender<T>,
     parse_fn: Arc<dyn Fn(&BytesStart) -> Option<T> + Send + Sync + 'static>,
 ) -> Result<()>
 where
@@ -129,7 +129,7 @@ where
 {
     let file = File::open(input_path)?;
     let mmap = unsafe { Mmap::map(&file)? };
-    let processed = process_chunks(&mmap[..], &sender, parse_fn);
+    let processed = process_chunks(&mmap[..], sender, parse_fn);
     log::info!("Mmap chunks processed: {}", processed);
     Ok(())
 }
@@ -137,13 +137,13 @@ where
 /// Process chunks from memory (for ZIP files)
 pub fn process_memory_chunks<T>(
     content: &[u8],
-    sender: channel::Sender<T>,
+    sender: &channel::Sender<T>,
     parse_fn: Arc<dyn Fn(&BytesStart) -> Option<T> + Send + Sync + 'static>,
 ) -> Result<()>
 where
     T: Send + 'static,
 {
-    let processed = process_chunks(content, &sender, parse_fn);
+    let processed = process_chunks(content, sender, parse_fn);
     log::info!("Memory chunks processed: {}", processed);
     Ok(())
 }

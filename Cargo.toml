@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 quick-xml = "0.38.0"
 rayon = "1.6"
-dashmap = "6.1.0"
 csv = "1.1"
 zip = "4.2.0"
 crossbeam-channel = "0.5"

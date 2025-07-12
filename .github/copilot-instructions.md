@@ -73,4 +73,3 @@ Target: 700k+ records/second. Use `--no-metrics` to disable throughput logging d
 - Update `README.md` and `docs/PROJECT_STRUCTURE.md` when changing architecture
 - Performance optimizations in `Cargo.toml`: dependencies built with `opt-level = 3` even in debug
 - Generic design supports future data sources beyond Apple Health
-- Threading is configurable via CLI `--threads` option
