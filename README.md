@@ -8,7 +8,7 @@ Written in Rust, the project aims to provide a framework for transforming variou
 
 - Multithreaded XML parsing using `quick-xml` and `Rayon` for optimal performance.
 - Memory-efficient processing with streaming and chunked buffering.
-- Dedicated Rayon thread pools for transform and load phases to avoid contention.
+- Dedicated Rayon thread pools for each phase are preloaded at startup to avoid latency.
 - Outputs structured CSV files for various health record types, all compressed into a single ZIP archive.
 - Robust error handling and logging capabilities.
 - Cross-platform compatibility (Linux, macOS, Windows).

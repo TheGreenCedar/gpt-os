@@ -1,10 +1,11 @@
 use crate::error::Result;
 use crossbeam_channel as channel;
 use log::{debug, info};
-use rayon::ThreadPoolBuilder;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 
 /// Represents a single, processable data record.
@@ -20,24 +21,19 @@ pub trait Processable: Send + Sync + Debug + 'static {
 
 /// Extracts records from a data source into a channel.
 pub trait Extractor<T: Processable> {
-    fn extract(&self, input_path: &Path, threads: usize) -> Result<channel::Receiver<T>>;
+    fn extract(&self, input_path: &Path, pool: Arc<ThreadPool>) -> Result<channel::Receiver<T>>;
 }
 
 /// Loads grouped records into a data sink.
 pub trait Sink<T: Processable> {
-    fn load(
-        &self,
-        grouped_records: HashMap<String, Vec<T>>,
-        output_path: &Path,
-        threads: usize,
-    ) -> Result<()>;
+    fn load(&self, grouped_records: HashMap<String, Vec<T>>, output_path: &Path) -> Result<()>;
 }
 
 pub struct Engine<T, E, S>
 where
     T: Processable,
-    E: Extractor<T>,
-    S: Sink<T>,
+    E: Extractor<T> + Sync,
+    S: Sink<T> + Sync,
 {
     extractor: E,
     sink: S,
@@ -47,8 +43,8 @@ where
 impl<T, E, S> Engine<T, E, S>
 where
     T: Processable,
-    E: Extractor<T>,
-    S: Sink<T>,
+    E: Extractor<T> + Sync,
+    S: Sink<T> + Sync,
 {
     pub fn new(extractor: E, sink: S) -> Self {
         Self {
@@ -66,6 +62,22 @@ where
         transform_threads: usize,
         load_threads: usize,
     ) -> Result<()> {
+        info!("Preloading thread pools...");
+        let extract_pool = Arc::new(
+            ThreadPoolBuilder::new()
+                .num_threads(extract_threads)
+                .build()
+                .expect("create thread pool"),
+        );
+        let transform_pool = ThreadPoolBuilder::new()
+            .num_threads(transform_threads)
+            .build()
+            .expect("create thread pool");
+        let load_pool = ThreadPoolBuilder::new()
+            .num_threads(load_threads)
+            .build()
+            .expect("create thread pool");
+
         let start_time = Instant::now();
         info!("Starting ETL pipeline");
         info!("Input: {}", input_path.display());
@@ -81,7 +93,7 @@ where
             "Starting extraction phase with {} workers...",
             extract_threads
         );
-        let receiver = self.extractor.extract(input_path, extract_threads)?;
+        let receiver = self.extractor.extract(input_path, extract_pool.clone())?;
         let extract_duration = extract_start.elapsed();
         debug!(
             "Extraction phase setup completed in {:.3}s",
@@ -94,11 +106,7 @@ where
             "Starting transformation phase with {} workers...",
             transform_threads
         );
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(transform_threads)
-            .build()
-            .expect("create thread pool");
-        let grouped_records = pool.install(|| transformer::transform(receiver));
+        let grouped_records = transform_pool.install(|| transformer::transform(receiver));
         let transform_duration = transform_start.elapsed();
 
         let total_records: usize = grouped_records.iter().map(|(_, v)| v.len()).sum();
@@ -113,7 +121,7 @@ where
         // Load phase
         let load_start = Instant::now();
         info!("Starting load phase with {} workers...", load_threads);
-        self.sink.load(grouped_records, output_path, load_threads)?;
+        load_pool.install(|| self.sink.load(grouped_records, output_path))?;
         let load_duration = load_start.elapsed();
         info!(
             "Load phase completed in {:.3}s",
