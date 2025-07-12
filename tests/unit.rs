@@ -1,10 +1,10 @@
-use dashmap::DashMap;
 use gpt_os::apple_health::types::GenericRecord;
 use gpt_os::core::{Processable, Sink};
 use gpt_os::sinks::csv_zip::CsvZipSink;
 use gpt_os::xml_utils;
 use quick_xml::Reader;
 use quick_xml::events::Event;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use tempfile::NamedTempFile;
@@ -161,11 +161,11 @@ fn csv_sink_sorts_records_by_date() {
     let r1 = parse(xml1);
     let r2 = parse(xml2);
 
-    let map: DashMap<String, Vec<GenericRecord>> = DashMap::new();
+    let mut map: HashMap<String, Vec<GenericRecord>> = HashMap::new();
     map.entry("Steps".to_string()).or_default().extend([r1, r2]);
 
     let tmp = NamedTempFile::new().unwrap();
-    CsvZipSink.load(map, tmp.path()).unwrap();
+    CsvZipSink.load(map, tmp.path(), 1).unwrap();
 
     let file = File::open(tmp.path()).unwrap();
     let mut archive = ZipArchive::new(file).unwrap();

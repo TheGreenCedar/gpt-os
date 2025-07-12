@@ -30,16 +30,24 @@ fn main() {
     let extractor = apple_health::extractor::AppleHealthExtractor;
     let sink = sinks::csv_zip::CsvZipSink;
 
-    let num_workers = config
-        .threads
-        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |p| p.get()));
-
-    let engine = core::Engine::new(extractor, sink, num_workers);
+    let engine = core::Engine::new(extractor, sink);
 
     let input_path = Path::new(&config.input_file);
     let output_path = Path::new(&config.output_zip);
 
-    if let Err(e) = engine.run(input_path, output_path) {
+    let avail = std::thread::available_parallelism().map_or(1, |p| p.get());
+    let default_threads = avail / 2 + 1;
+    let extract_threads = config.extract_threads.unwrap_or(default_threads);
+    let transform_threads = config.transform_threads.unwrap_or(default_threads);
+    let load_threads = config.load_threads.unwrap_or(default_threads);
+
+    if let Err(e) = engine.run(
+        input_path,
+        output_path,
+        extract_threads,
+        transform_threads,
+        load_threads,
+    ) {
         error!("❌ Application error: {}", e);
         process::exit(1);
     }
