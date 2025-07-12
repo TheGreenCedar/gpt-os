@@ -1,11 +1,13 @@
 use crate::core::{Processable, Sink};
-use crate::error::Result;
+use crate::error::{AppError, Result};
+use crossbeam_channel::bounded;
 use log::{debug, info, warn};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Cursor, Write};
 use std::path::Path;
+use std::thread;
 use std::time::Instant;
 use zip::ZipArchive;
 use zip::{CompressionMethod, ZipWriter, write::FileOptions};
@@ -49,13 +51,31 @@ where
             total_files, total_recs
         );
 
-        // 2. Parallel CSV serialization into byte buffers using a dedicated thread pool
-        let mini_zips: Vec<_> = entries
+        // 2. Parallel CSV serialization into byte buffers and streaming merge into the final ZIP
+        let (tx, rx) = bounded::<(String, Cursor<Vec<u8>>)>(1);
+
+        // spawn merge thread to consume mini-zips as they complete
+        let output_path = output_path.to_owned();
+        let merge_handle = thread::spawn(move || -> Result<()> {
+            let mut out = File::create(&output_path)?;
+            let mut zip = ZipWriter::new(&mut out);
+            for (name, mut mini) in rx {
+                let src = ZipArchive::new(&mut mini)?;
+                zip.merge_archive(src)?;
+                debug!("Merged '{}.csv' from mini-zip", name);
+            }
+            zip.finish()?;
+            log::info!("Done in {:.2}s", start.elapsed().as_secs_f64());
+            Ok(())
+        });
+
+        // 3. Produce mini-zips in parallel and stream into the merge channel
+        entries
             .into_par_iter()
-            .map(|(name, mut recs)| -> Result<_> {
+            .try_for_each(|(name, mut recs)| -> Result<()> {
                 use std::collections::BTreeSet;
                 recs.sort_by_key(|r| r.sort_key().unwrap_or_default());
-                // a) build CSV in memory
+                // build CSV in memory
                 let mut buf = Vec::with_capacity(recs.len() * 100);
                 {
                     let mut header_set = BTreeSet::new();
@@ -75,7 +95,7 @@ where
                 }
                 debug!("CSV for '{}' is {} bytes", name, buf.len());
 
-                // b) wrap in a 1-entry ZIP
+                // wrap in a 1-entry ZIP
                 let mut cursor = Cursor::new(Vec::with_capacity(buf.len() / 3));
                 {
                     let mut mini = ZipWriter::new(&mut cursor);
@@ -87,20 +107,13 @@ where
                     mini.finish()?;
                 }
                 cursor.set_position(0);
-                Ok((name, cursor))
-            })
-            .collect::<Result<_>>()?;
+                tx.send((name, cursor))
+                    .map_err(|e| AppError::Unknown(e.to_string()))?;
+                Ok(())
+            })?;
 
-        // 3. Merge them into the final ZIP
-        let mut out = File::create(output_path)?;
-        let mut zip = ZipWriter::new(&mut out);
-        for (name, mut mini) in mini_zips {
-            let src = ZipArchive::new(&mut mini)?;
-            zip.merge_archive(src)?;
-            debug!("Merged '{}.csv' from mini-zip", name);
-        }
-        zip.finish()?;
-        log::info!("Done in {:.2}s", start.elapsed().as_secs_f64());
-        Ok(())
+        // drop sender and wait for merging to complete
+        drop(tx);
+        merge_handle.join().expect("merge thread panicked")
     }
 }
