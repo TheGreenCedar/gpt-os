@@ -1,12 +1,11 @@
 use crate::error::Result;
-use crossbeam_channel as channel;
+use async_trait::async_trait;
 use log::{debug, info};
-use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::mpsc;
 
 /// Represents a single, processable data record.
 pub trait Processable: Send + Sync + Debug + 'static {
@@ -20,13 +19,19 @@ pub trait Processable: Send + Sync + Debug + 'static {
 }
 
 /// Extracts records from a data source into a channel.
+#[async_trait]
 pub trait Extractor<T: Processable> {
-    fn extract(&self, input_path: &Path, pool: Arc<ThreadPool>) -> Result<channel::Receiver<T>>;
+    async fn extract(&self, input_path: &Path) -> Result<mpsc::Receiver<T>>;
 }
 
 /// Loads grouped records into a data sink.
+#[async_trait]
 pub trait Sink<T: Processable> {
-    fn load(&self, grouped_records: HashMap<String, Vec<T>>, output_path: &Path) -> Result<()>;
+    async fn load(
+        &self,
+        grouped_records: HashMap<String, Vec<T>>,
+        output_path: &Path,
+    ) -> Result<()>;
 }
 
 pub struct Engine<T, E, S>
@@ -54,46 +59,16 @@ where
         }
     }
 
-    pub fn run(
-        &self,
-        input_path: &Path,
-        output_path: &Path,
-        extract_threads: usize,
-        transform_threads: usize,
-        load_threads: usize,
-    ) -> Result<()> {
-        info!("Preloading thread pools...");
-        let extract_pool = Arc::new(
-            ThreadPoolBuilder::new()
-                .num_threads(extract_threads)
-                .build()
-                .expect("create thread pool"),
-        );
-        let transform_pool = ThreadPoolBuilder::new()
-            .num_threads(transform_threads)
-            .build()
-            .expect("create thread pool");
-        let load_pool = ThreadPoolBuilder::new()
-            .num_threads(load_threads)
-            .build()
-            .expect("create thread pool");
-
+    pub async fn run(&self, input_path: &Path, output_path: &Path) -> Result<()> {
         let start_time = Instant::now();
         info!("Starting ETL pipeline");
         info!("Input: {}", input_path.display());
         info!("Output: {}", output_path.display());
-        info!(
-            "Threads - extract: {}, transform: {}, load: {}",
-            extract_threads, transform_threads, load_threads
-        );
 
         // Extract phase
         let extract_start = Instant::now();
-        info!(
-            "Starting extraction phase with {} workers...",
-            extract_threads
-        );
-        let receiver = self.extractor.extract(input_path, extract_pool.clone())?;
+        info!("Starting extraction phase...");
+        let receiver = self.extractor.extract(input_path).await?;
         let extract_duration = extract_start.elapsed();
         debug!(
             "Extraction phase setup completed in {:.3}s",
@@ -102,11 +77,8 @@ where
 
         // Transform phase
         let transform_start = Instant::now();
-        info!(
-            "Starting transformation phase with {} workers...",
-            transform_threads
-        );
-        let grouped_records = transform_pool.install(|| transformer::transform(receiver));
+        info!("Starting transformation phase...");
+        let grouped_records = transformer::transform(receiver).await;
         let transform_duration = transform_start.elapsed();
 
         let total_records: usize = grouped_records.iter().map(|(_, v)| v.len()).sum();
@@ -120,8 +92,8 @@ where
 
         // Load phase
         let load_start = Instant::now();
-        info!("Starting load phase with {} workers...", load_threads);
-        load_pool.install(|| self.sink.load(grouped_records, output_path))?;
+        info!("Starting load phase...");
+        self.sink.load(grouped_records, output_path).await?;
         let load_duration = load_start.elapsed();
         info!(
             "Load phase completed in {:.3}s",
@@ -151,33 +123,23 @@ where
 
 mod transformer {
     use super::Processable;
-    use crossbeam_channel::Receiver;
     use log::{debug, info};
-    use rayon::iter::{ParallelBridge, ParallelIterator};
     use std::collections::HashMap;
     use std::time::Instant;
+    use tokio::sync::mpsc::Receiver;
 
-    pub fn transform<T: Processable>(receiver: Receiver<T>) -> HashMap<String, Vec<T>> {
+    pub async fn transform<T: Processable>(mut receiver: Receiver<T>) -> HashMap<String, Vec<T>> {
         let start_time = Instant::now();
-        let (grouped_records, total_processed) = receiver
-            .into_iter()
-            .par_bridge()
-            .fold(
-                || (HashMap::<String, Vec<T>>::new(), 0usize),
-                |(mut map, count), record| {
-                    map.entry(record.grouping_key()).or_default().push(record);
-                    (map, count + 1)
-                },
-            )
-            .reduce(
-                || (HashMap::<String, Vec<T>>::new(), 0),
-                |(mut a, acount), (b, bcount)| {
-                    for (k, mut v) in b {
-                        a.entry(k).or_default().extend(v.drain(..));
-                    }
-                    (a, acount + bcount)
-                },
-            );
+        let mut grouped_records: HashMap<String, Vec<T>> = HashMap::new();
+        let mut total_processed = 0usize;
+
+        while let Some(record) = receiver.recv().await {
+            grouped_records
+                .entry(record.grouping_key())
+                .or_default()
+                .push(record);
+            total_processed += 1;
+        }
 
         let duration = start_time.elapsed();
         info!(
