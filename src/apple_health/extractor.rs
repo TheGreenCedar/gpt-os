@@ -7,6 +7,7 @@ use crate::error::Result;
 use async_trait::async_trait;
 use crossbeam_channel as channel;
 use log::error;
+use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -24,14 +25,10 @@ impl Extractor<GenericRecord> for AppleHealthExtractor {
         task::spawn_blocking(move || {
             let result: Result<()> = (|| {
                 if path.extension().and_then(|s| s.to_str()) == Some("zip") {
-                    let content = xml_utils::extract_xml_from_zip(&path)?;
-                    xml_utils::process_memory_chunks(
-                        &content,
-                        &cb_tx,
-                        Arc::new(Self::parse_generic),
-                    )?;
+                    xml_utils::process_zip_stream(&path, &cb_tx, Arc::new(Self::parse_generic))?;
                 } else {
-                    xml_utils::process_xml_file_mmap(&path, &cb_tx, Arc::new(Self::parse_generic))?;
+                    let file = File::open(&path)?;
+                    xml_utils::process_stream(file, &cb_tx, Arc::new(Self::parse_generic))?;
                 }
                 Ok(())
             })();
