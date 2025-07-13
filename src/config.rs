@@ -15,18 +15,6 @@ pub struct Config {
     #[arg(short, long)]
     pub verbose: bool,
 
-    /// Number of threads for the extraction phase
-    #[arg(long)]
-    pub extract_threads: Option<usize>,
-
-    /// Number of threads for the transformation phase
-    #[arg(long)]
-    pub transform_threads: Option<usize>,
-
-    /// Number of threads for the load phase
-    #[arg(long)]
-    pub load_threads: Option<usize>,
-
     /// Disable printing of end-of-run metrics
     #[arg(long)]
     pub no_metrics: bool,
