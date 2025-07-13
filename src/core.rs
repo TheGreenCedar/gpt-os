@@ -81,7 +81,7 @@ where
         let grouped_records = transformer::transform(receiver).await;
         let transform_duration = transform_start.elapsed();
 
-        let total_records: usize = grouped_records.iter().map(|(_, v)| v.len()).sum();
+        let total_records: usize = grouped_records.values().map(Vec::len).sum();
         let record_types = grouped_records.len();
         info!(
             "Transformation completed in {:.3}s: {} records grouped into {} types",
