@@ -17,35 +17,70 @@ use crate::error::{AppError, Result};
 /// Target chunk size in bytes
 pub const CHUNK_SIZE: usize = 2 * 1024 * 1024;
 
-/// Find safe chunk boundaries by looking for complete XML elements
+/// Advance index past any whitespace characters and return the new position.
+fn skip_whitespace(data: &[u8], mut idx: usize) -> usize {
+    while idx < data.len() && data[idx].is_ascii_whitespace() {
+        idx += 1;
+    }
+    idx
+}
+
+/// Return the position of the next element start if it immediately follows a
+/// closing tag. `start` should point just after a `>` character.
+fn advance_to_next_element(data: &[u8], start: usize) -> Option<usize> {
+    let idx = skip_whitespace(data, start);
+    if idx < data.len() && is_element_start(&data[idx..]) {
+        Some(idx)
+    } else {
+        None
+    }
+}
+
+/// Scan forward from `start` looking for a safe boundary which is the beginning
+/// of the next XML element. Returns `None` if no such boundary exists.
+fn find_boundary_after(data: &[u8], mut start: usize) -> Option<usize> {
+    let len = data.len();
+    while start < len {
+        if data[start] == b'>' {
+            if let Some(pos) = advance_to_next_element(data, start + 1) {
+                return Some(pos);
+            }
+        }
+        start += 1;
+    }
+    None
+}
+
+/// Find safe chunk boundaries by looking for complete XML elements.
+///
+/// The function walks through the input in roughly `CHUNK_SIZE` steps. From
+/// each tentative boundary it scans forward until it finds a closing `>` that is
+/// followed (ignoring whitespace) by the start of a new element. Splitting on
+/// these positions guarantees that no chunk begins in the middle of an XML
+/// element.
 pub fn find_chunk_boundaries(content: &[u8]) -> Vec<usize> {
     let mut boundaries = vec![0];
     let mut pos = 0;
     let content_len = content.len();
 
     while pos < content_len {
+        // Jump ahead approximately `CHUNK_SIZE` bytes from the last boundary
+        // and try to align the next chunk with the start of an element.
         let target_pos = (pos + CHUNK_SIZE).min(content_len);
-        let mut boundary_pos = target_pos;
-        while boundary_pos > pos && boundary_pos < content_len {
-            if content[boundary_pos] == b'>' {
-                let mut next_pos = boundary_pos + 1;
-                while next_pos < content_len && content[next_pos].is_ascii_whitespace() {
-                    next_pos += 1;
-                }
-                if next_pos < content_len && is_element_start(&content[next_pos..]) {
-                    boundary_pos = next_pos;
-                    break;
-                }
+
+        // Search for the next `>` followed by an element start. This ensures we
+        // never split inside an element.
+        if let Some(boundary_pos) = find_boundary_after(content, target_pos) {
+            if boundary_pos < content_len {
+                boundaries.push(boundary_pos);
+                pos = boundary_pos;
+                continue;
             }
-            boundary_pos += 1;
         }
-        if boundary_pos > pos && boundary_pos < content_len {
-            boundaries.push(boundary_pos);
-            pos = boundary_pos;
-        } else {
-            break;
-        }
+        break;
     }
+
+    // Always include the end of the data as the final boundary.
     if boundaries.last() != Some(&content_len) {
         boundaries.push(content_len);
     }
