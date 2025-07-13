@@ -36,3 +36,11 @@ debug = true
 [profile.dev.package."*"]
 opt-level = 3
 debug = false
+
+[[bench]]
+name = "flamegraph"
+harness = false
+
+[profile.bench]
+opt-level = 3
+debug = true

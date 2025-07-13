@@ -1,26 +1,30 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use gpt_os::apple_health::extractor::AppleHealthExtractor;
-use gpt_os::core::Engine;
-use gpt_os::sinks::csv_zip::CsvZipSink;
-use std::path::Path;
+use std::process::Command;
+use std::time::Duration;
 use tempfile::NamedTempFile;
-use tokio::runtime::Runtime;
 
 fn bench_sample(c: &mut Criterion) {
-    let rt = Runtime::new().expect("runtime");
     c.bench_function("process_sample_export", |b| {
         b.iter(|| {
-            let extractor = AppleHealthExtractor;
-            let sink = CsvZipSink;
-            let engine = Engine::new(extractor, sink);
-            let input = Path::new("tests/fixtures/sample_export.xml");
-            let output = NamedTempFile::new().expect("temp file");
-            rt.block_on(async {
-                engine.run(input, output.path()).await.expect("run engine");
-            });
+            // Create a temporary output file for each iteration
+            let output = NamedTempFile::with_suffix(".zip").expect("temp file");
+            // Invoke the CLI binary to measure full execution
+            let status = Command::new(env!("CARGO_BIN_EXE_gpt-os"))
+                .arg("AppleHealth2025-06-28.zip")
+                .arg(output.path())
+                .status()
+                .expect("failed to execute process");
+            assert!(status.success());
         });
     });
 }
 
-criterion_group!(benches, bench_sample);
+// Replace default group to adjust measurement time and sample size
+criterion_group! {
+    name = benches;
+    config = Criterion::default()
+        .measurement_time(Duration::from_secs(15))
+        .sample_size(10);
+    targets = bench_sample
+}
 criterion_main!(benches);
