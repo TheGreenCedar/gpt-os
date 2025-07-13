@@ -71,6 +71,17 @@ cargo test
 
 The tool is designed to handle large Apple Health exports efficiently, targeting a throughput of at least 700,000 records per second (~6 to 12 months worth of data per second) on an 8-core, hyperthreaded CPU with an ssd.
 
+## Benchmarking
+
+The repository includes a Criterion benchmark at `benches/flamegraph.rs`.
+Run it with the [`cargo flamegraph`](https://github.com/ferrous-systems/flamegraph) subcommand to produce a flamegraph:
+
+```bash
+cargo flamegraph --bench flamegraph
+```
+
+The generated `flamegraph.svg` will appear in `target/flamegraph/`.
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
