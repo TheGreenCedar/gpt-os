@@ -5,6 +5,7 @@ use crate::apple_health::types::GenericRecord;
 use crate::core::Extractor;
 use crate::error::Result;
 use crossbeam_channel as channel;
+use log::error;
 use rayon::ThreadPool;
 use std::{path::Path, sync::Arc, thread};
 
@@ -40,9 +41,8 @@ impl Extractor<GenericRecord> for AppleHealthExtractor {
 
             drop(sender);
 
-            if let Err(_) = result {
-                // Error occurred, but we can't send it through the channel
-                // The receiver will detect the channel is closed
+            if let Err(e) = result {
+                error!("Extractor thread failed: {}", e);
             }
         });
 
