@@ -73,40 +73,7 @@ where
         entries
             .into_par_iter()
             .try_for_each(|(name, mut recs)| -> Result<()> {
-                use std::collections::BTreeSet;
-                recs.sort_by_key(|r| r.sort_key().unwrap_or_default());
-                // build CSV in memory
-                let mut buf = Vec::with_capacity(recs.len() * 100);
-                {
-                    let mut header_set = BTreeSet::new();
-                    for r in &recs {
-                        header_set.extend(r.headers());
-                    }
-                    let headers: Vec<String> = header_set.into_iter().collect();
-
-                    let mut w = csv::WriterBuilder::new()
-                        .has_headers(true)
-                        .from_writer(&mut buf);
-                    w.write_record(&headers)?;
-                    for r in &recs {
-                        r.write(&mut w, &headers)?;
-                    }
-                    w.flush()?;
-                }
-                debug!("CSV for '{}' is {} bytes", name, buf.len());
-
-                // wrap in a 1-entry ZIP
-                let mut cursor = Cursor::new(Vec::with_capacity(buf.len() / 3));
-                {
-                    let mut mini = ZipWriter::new(&mut cursor);
-                    let opts = FileOptions::<()>::default()
-                        .compression_method(CompressionMethod::Deflated)
-                        .unix_permissions(0o644);
-                    mini.start_file(format!("{}.csv", &name), opts)?;
-                    mini.write_all(&buf)?;
-                    mini.finish()?;
-                }
-                cursor.set_position(0);
+                let cursor = create_mini_zip(&name, &mut recs)?;
                 tx.send((name, cursor))
                     .map_err(|e| AppError::Unknown(e.to_string()))?;
                 Ok(())
@@ -116,4 +83,47 @@ where
         drop(tx);
         merge_handle.join().expect("merge thread panicked")
     }
+}
+
+fn create_mini_zip<T>(name: &str, recs: &mut [T]) -> Result<Cursor<Vec<u8>>>
+where
+    T: Processable + CsvWritable,
+{
+    use std::collections::BTreeSet;
+
+    recs.sort_by_key(|r| r.sort_key().unwrap_or_default());
+
+    // build CSV in memory
+    let mut buf = Vec::with_capacity(recs.len() * 100);
+    {
+        let mut header_set = BTreeSet::new();
+        for r in &*recs {
+            header_set.extend(r.headers());
+        }
+        let headers: Vec<String> = header_set.into_iter().collect();
+
+        let mut w = csv::WriterBuilder::new()
+            .has_headers(true)
+            .from_writer(&mut buf);
+        w.write_record(&headers)?;
+        for r in &*recs {
+            r.write(&mut w, &headers)?;
+        }
+        w.flush()?;
+    }
+    debug!("CSV for '{}' is {} bytes", name, buf.len());
+
+    // wrap in a 1-entry ZIP
+    let mut cursor = Cursor::new(Vec::with_capacity(buf.len() / 3));
+    {
+        let mut mini = ZipWriter::new(&mut cursor);
+        let opts = FileOptions::<()>::default()
+            .compression_method(CompressionMethod::Deflated)
+            .unix_permissions(0o644);
+        mini.start_file(format!("{}.csv", name), opts)?;
+        mini.write_all(&buf)?;
+        mini.finish()?;
+    }
+    cursor.set_position(0);
+    Ok(cursor)
 }
