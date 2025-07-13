@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use tempfile::NamedTempFile;
+use tokio_test::block_on;
 use zip::ZipArchive;
 
 #[test]
@@ -165,11 +166,7 @@ fn csv_sink_sorts_records_by_date() {
     map.entry("Steps".to_string()).or_default().extend([r1, r2]);
 
     let tmp = NamedTempFile::new().unwrap();
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(1)
-        .build()
-        .unwrap();
-    pool.install(|| CsvZipSink.load(map, tmp.path())).unwrap();
+    block_on(CsvZipSink.load(map, tmp.path())).unwrap();
 
     let file = File::open(tmp.path()).unwrap();
     let mut archive = ZipArchive::new(file).unwrap();

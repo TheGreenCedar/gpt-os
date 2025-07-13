@@ -14,6 +14,8 @@ use std::sync::{
 
 use crate::error::{AppError, Result};
 
+type ParseFn<T> = Arc<dyn Fn(&BytesStart) -> Option<T> + Send + Sync + 'static>;
+
 /// Target chunk size in bytes
 pub const CHUNK_SIZE: usize = 2 * 1024 * 1024;
 
@@ -120,11 +122,7 @@ pub fn process_chunk_slice<T>(
 }
 
 /// Process pre-split chunks and send parsed rows
-pub fn process_chunks<T>(
-    data: &[u8],
-    sender: &channel::Sender<T>,
-    parse_fn: Arc<dyn Fn(&BytesStart) -> Option<T> + Send + Sync + 'static>,
-) -> usize
+pub fn process_chunks<T>(data: &[u8], sender: &channel::Sender<T>, parse_fn: ParseFn<T>) -> usize
 where
     T: Send + 'static,
 {
@@ -157,7 +155,7 @@ where
 pub fn process_xml_file_mmap<T>(
     input_path: &Path,
     sender: &channel::Sender<T>,
-    parse_fn: Arc<dyn Fn(&BytesStart) -> Option<T> + Send + Sync + 'static>,
+    parse_fn: ParseFn<T>,
 ) -> Result<()>
 where
     T: Send + 'static,
@@ -173,7 +171,7 @@ where
 pub fn process_memory_chunks<T>(
     content: &[u8],
     sender: &channel::Sender<T>,
-    parse_fn: Arc<dyn Fn(&BytesStart) -> Option<T> + Send + Sync + 'static>,
+    parse_fn: ParseFn<T>,
 ) -> Result<()>
 where
     T: Send + 'static,

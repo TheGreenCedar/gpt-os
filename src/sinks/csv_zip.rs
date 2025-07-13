@@ -9,6 +9,7 @@ use std::io::{Cursor, Write};
 use std::path::Path;
 use std::thread;
 use std::time::Instant;
+use tokio::task;
 use zip::ZipArchive;
 use zip::{CompressionMethod, ZipWriter, write::FileOptions};
 
@@ -23,11 +24,28 @@ pub trait CsvWritable {
 
 pub struct CsvZipSink;
 
+#[async_trait::async_trait]
 impl<T> Sink<T> for CsvZipSink
 where
     T: Processable + CsvWritable + Send + Sync + 'static,
 {
-    fn load(&self, grouped_records: HashMap<String, Vec<T>>, output_path: &Path) -> Result<()> {
+    async fn load(
+        &self,
+        grouped_records: HashMap<String, Vec<T>>,
+        output_path: &Path,
+    ) -> Result<()> {
+        let out = output_path.to_owned();
+        task::spawn_blocking(move || Self::load_sync(grouped_records, &out))
+            .await
+            .unwrap()
+    }
+}
+
+impl CsvZipSink {
+    fn load_sync<T>(grouped_records: HashMap<String, Vec<T>>, output_path: &Path) -> Result<()>
+    where
+        T: Processable + CsvWritable + Send + Sync + 'static,
+    {
         let start = Instant::now();
 
         // 1. Drain and filter empty groups into a Vec

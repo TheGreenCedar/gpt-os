@@ -6,9 +6,9 @@ Written in Rust, the project aims to provide a framework for transforming variou
 
 ## Features
 
-- Multithreaded XML parsing using `quick-xml` and `Rayon` for optimal performance.
+- Asynchronous XML parsing using `quick-xml` running on the Tokio runtime.
 - Memory-efficient processing with streaming and chunked buffering.
-- Dedicated Rayon thread pools for each phase are preloaded at startup to avoid latency.
+- Built on Tokio's multi-threaded runtime for efficient concurrency.
 - Outputs structured CSV files for various health record types, all compressed into a single ZIP archive.
 - Robust error handling and logging capabilities.
 - Cross-platform compatibility (Linux, macOS, Windows).
@@ -37,9 +37,6 @@ gpt-os [OPTIONS] <INPUT_FILE> <OUTPUT_ZIP>
 ### Options
 
 - `-v, --verbose`: Enable verbose logging.
-- `--extract-threads <N>`: Threads for extraction phase (default: available/2 + 1).
-- `--transform-threads <N>`: Threads for transformation phase (default: available/2 + 1).
-- `--load-threads <N>`: Threads for load phase (default: available/2 + 1).
 - `--no-metrics`: Disable printing of end-of-run metrics.
 - `-h, --help`: Show usage information.
 
