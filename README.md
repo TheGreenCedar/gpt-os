@@ -9,7 +9,7 @@ Written in Rust, the project aims to provide a framework for transforming variou
 - Asynchronous XML parsing using `quick-xml` running on the Tokio runtime.
 - Memory-efficient processing with streaming and chunked buffering.
 - Built on Tokio's multi-threaded runtime for efficient concurrency.
-- Outputs structured CSV files for various health record types, all compressed into a single ZIP archive.
+- Outputs structured CSV files for various health record types, all compressed using Zstandard into a single ZIP archive.
 - Robust error handling and logging capabilities.
 - Cross-platform compatibility (Linux, macOS, Windows).
 
