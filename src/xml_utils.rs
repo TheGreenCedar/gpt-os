@@ -11,8 +11,8 @@ use crate::error::{AppError, Result};
 
 type ParseFn<T> = fn(&BytesStart) -> Option<T>;
 
-/// Target chunk size in bytes
-pub const CHUNK_SIZE: usize = 2 * 1024 * 1024;
+/// Target chunk size in bytes - optimized for L2 cache efficiency
+pub const CHUNK_SIZE: usize = 128 * 1024; // 128KB
 
 /// Advance index past any whitespace characters and return the new position.
 fn skip_whitespace(data: &[u8], mut idx: usize) -> usize {
@@ -156,28 +156,6 @@ where
     });
 
     result
-}
-
-/// Extract XML content from ZIP file and return as bytes
-#[allow(dead_code)]
-pub fn extract_xml_from_zip(input_path: &Path) -> Result<Vec<u8>> {
-    use std::io::Read;
-    let file = File::open(input_path)?;
-    let mut archive = zip::ZipArchive::new(file)?;
-    let export_file_name = archive
-        .file_names()
-        .find(|name| name.ends_with("export.xml"))
-        .map(|s| s.to_string());
-    if let Some(name) = export_file_name {
-        let mut export_file = archive.by_name(&name)?;
-        let mut content = Vec::new();
-        export_file.read_to_end(&mut content)?;
-        Ok(content)
-    } else {
-        Err(AppError::ParseError(
-            "Could not find export.xml in the zip archive".to_string(),
-        ))
-    }
 }
 
 /// Stream and process `export.xml` directly from a ZIP file
