@@ -20,7 +20,6 @@ type ParseFn<T> = Arc<dyn Fn(&BytesStart) -> Option<T> + Send + Sync + 'static>;
 pub const CHUNK_SIZE: usize = 2 * 1024 * 1024;
 
 /// Advance index past any whitespace characters and return the new position.
-#[allow(dead_code)]
 fn skip_whitespace(data: &[u8], mut idx: usize) -> usize {
     while idx < data.len() && data[idx].is_ascii_whitespace() {
         idx += 1;
@@ -30,7 +29,6 @@ fn skip_whitespace(data: &[u8], mut idx: usize) -> usize {
 
 /// Return the position of the next element start if it immediately follows a
 /// closing tag. `start` should point just after a `>` character.
-#[allow(dead_code)]
 fn advance_to_next_element(data: &[u8], start: usize) -> Option<usize> {
     let idx = skip_whitespace(data, start);
     if idx < data.len() && is_element_start(&data[idx..]) {
@@ -42,7 +40,6 @@ fn advance_to_next_element(data: &[u8], start: usize) -> Option<usize> {
 
 /// Scan forward from `start` looking for a safe boundary which is the beginning
 /// of the next XML element. Returns `None` if no such boundary exists.
-#[allow(dead_code)]
 fn find_boundary_after(data: &[u8], mut start: usize) -> Option<usize> {
     let len = data.len();
     while start < len {
@@ -63,7 +60,6 @@ fn find_boundary_after(data: &[u8], mut start: usize) -> Option<usize> {
 /// followed (ignoring whitespace) by the start of a new element. Splitting on
 /// these positions guarantees that no chunk begins in the middle of an XML
 /// element.
-#[allow(dead_code)]
 pub fn find_chunk_boundaries(content: &[u8]) -> Vec<usize> {
     let mut boundaries = vec![0];
     let mut pos = 0;
@@ -93,7 +89,6 @@ pub fn find_chunk_boundaries(content: &[u8]) -> Vec<usize> {
     boundaries
 }
 
-#[allow(dead_code)]
 fn is_element_start(data: &[u8]) -> bool {
     if data.len() < 2 || data[0] != b'<' {
         return false;
@@ -102,7 +97,6 @@ fn is_element_start(data: &[u8]) -> bool {
 }
 
 /// Process a slice of XML data using a provided parser callback
-#[allow(dead_code)]
 pub fn process_chunk_slice<T>(
     chunk: &[u8],
     parse_fn: &dyn Fn(&BytesStart) -> Option<T>,
