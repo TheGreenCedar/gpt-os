@@ -158,6 +158,38 @@ where
     processed.load(Ordering::Relaxed)
 }
 
+/// Read data from `reader` into `buffer` using a temporary slice.
+///
+/// Returns `Ok(true)` if bytes were read, `Ok(false)` on EOF.
+fn read_to_buffer<R: Read>(reader: &mut R, buffer: &mut Vec<u8>, tmp: &mut [u8]) -> Result<bool> {
+    match reader.read(tmp) {
+        Ok(0) => Ok(false),
+        Ok(n) => {
+            buffer.extend_from_slice(&tmp[..n]);
+            Ok(true)
+        }
+        Err(e) => Err(AppError::ParseError(format!("Read error: {}", e))),
+    }
+}
+
+/// Spawn a task to parse `chunk` and send all parsed records on `sender`.
+fn dispatch_chunk<T>(
+    scope: &rayon::Scope<'_>,
+    chunk: Vec<u8>,
+    sender: channel::Sender<T>,
+    parse_fn: ParseFn<T>,
+) where
+    T: Send + 'static,
+{
+    scope.spawn(move |_| {
+        if let Ok(records) = process_chunk_slice(&chunk, &*parse_fn) {
+            for r in records {
+                let _ = sender.send(r);
+            }
+        }
+    });
+}
+
 /// Process XML from any `Read` stream in parallel chunks without loading the
 /// entire file into memory.
 pub fn process_stream<T, R>(
@@ -175,11 +207,11 @@ where
 
     rayon::scope(|scope| {
         while result.is_ok() {
-            match reader.read(&mut read_buf) {
-                Ok(0) => break,
-                Ok(n) => buffer.extend_from_slice(&read_buf[..n]),
+            match read_to_buffer(&mut reader, &mut buffer, &mut read_buf) {
+                Ok(true) => {}
+                Ok(false) => break,
                 Err(e) => {
-                    result = Err(AppError::ParseError(format!("Read error: {}", e)));
+                    result = Err(e);
                     break;
                 }
             }
@@ -191,15 +223,7 @@ where
 
                 if let Some(boundary) = find_boundary_after(&buffer, CHUNK_SIZE) {
                     let chunk: Vec<u8> = buffer.drain(..boundary).collect();
-                    let s = sender.clone();
-                    let pf = Arc::clone(&parse_fn);
-                    scope.spawn(move |_| {
-                        if let Ok(records) = process_chunk_slice(&chunk, &*pf) {
-                            for r in records {
-                                let _ = s.send(r);
-                            }
-                        }
-                    });
+                    dispatch_chunk(scope, chunk, sender.clone(), Arc::clone(&parse_fn));
                 } else {
                     break;
                 }
@@ -208,15 +232,7 @@ where
 
         if result.is_ok() && !buffer.is_empty() {
             let chunk: Vec<u8> = buffer.drain(..).collect();
-            let s = sender.clone();
-            let pf = Arc::clone(&parse_fn);
-            scope.spawn(move |_| {
-                if let Ok(records) = process_chunk_slice(&chunk, &*pf) {
-                    for r in records {
-                        let _ = s.send(r);
-                    }
-                }
-            });
+            dispatch_chunk(scope, chunk, sender.clone(), Arc::clone(&parse_fn));
         }
     });
 
