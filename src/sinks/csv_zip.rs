@@ -1,6 +1,6 @@
 use crate::core::{Processable, Sink};
 use crate::error::{AppError, Result};
-use crossbeam_channel::bounded;
+use crossbeam_channel::{Receiver, bounded};
 use log::{debug, info, warn};
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -48,20 +48,7 @@ impl CsvZipSink {
     {
         let start = Instant::now();
 
-        // 1. Drain and filter empty groups into a Vec
-        let mut entries: Vec<(String, Vec<T>)> = grouped_records
-            .into_iter()
-            .filter_map(|(k, v)| {
-                if v.is_empty() {
-                    warn!("Skipping empty group '{}'", k);
-                    None
-                } else {
-                    Some((k, v))
-                }
-            })
-            .collect();
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-
+        let entries = filter_entries(grouped_records);
         let total_files = entries.len();
         let total_recs: usize = entries.iter().map(|(_, v)| v.len()).sum();
         info!(
@@ -72,20 +59,7 @@ impl CsvZipSink {
         // 2. Parallel CSV serialization into byte buffers and streaming merge into the final ZIP
         let (tx, rx) = bounded::<(String, Cursor<Vec<u8>>)>(1);
 
-        // spawn merge thread to consume mini-zips as they complete
-        let output_path = output_path.to_owned();
-        let merge_handle = thread::spawn(move || -> Result<()> {
-            let mut out = File::create(&output_path)?;
-            let mut zip = ZipWriter::new(&mut out);
-            for (name, mut mini) in rx {
-                let src = ZipArchive::new(&mut mini)?;
-                zip.merge_archive(src)?;
-                debug!("Merged '{}.csv' from mini-zip", name);
-            }
-            zip.finish()?;
-            log::info!("Done in {:.2}s", start.elapsed().as_secs_f64());
-            Ok(())
-        });
+        let merge_handle = spawn_merger(output_path, rx, start);
 
         // 3. Produce mini-zips in parallel and stream into the merge channel
         entries
@@ -101,6 +75,45 @@ impl CsvZipSink {
         drop(tx);
         merge_handle.join().expect("merge thread panicked")
     }
+}
+
+fn filter_entries<T>(grouped_records: HashMap<String, Vec<T>>) -> Vec<(String, Vec<T>)>
+where
+    T: Processable + CsvWritable,
+{
+    let mut entries: Vec<(String, Vec<T>)> = grouped_records
+        .into_iter()
+        .filter_map(|(k, v)| {
+            if v.is_empty() {
+                warn!("Skipping empty group '{}'", k);
+                None
+            } else {
+                Some((k, v))
+            }
+        })
+        .collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    entries
+}
+
+fn spawn_merger(
+    output_path: &Path,
+    rx: Receiver<(String, Cursor<Vec<u8>>)>,
+    start: Instant,
+) -> thread::JoinHandle<Result<()>> {
+    let output_path = output_path.to_owned();
+    thread::spawn(move || -> Result<()> {
+        let mut out = File::create(&output_path)?;
+        let mut zip = ZipWriter::new(&mut out);
+        for (name, mut mini) in rx {
+            let src = ZipArchive::new(&mut mini)?;
+            zip.merge_archive(src)?;
+            debug!("Merged '{}.csv' from mini-zip", name);
+        }
+        zip.finish()?;
+        log::info!("Done in {:.2}s", start.elapsed().as_secs_f64());
+        Ok(())
+    })
 }
 
 fn create_mini_zip<T>(name: &str, recs: &mut [T]) -> Result<Cursor<Vec<u8>>>
