@@ -1,5 +1,4 @@
 use crossbeam_channel as channel;
-use memmap2::Mmap;
 use quick_xml::{
     Reader,
     events::{BytesStart, Event},
@@ -157,38 +156,6 @@ where
             },
         );
     processed.load(Ordering::Relaxed)
-}
-
-/// Process XML file using memory-mapped I/O
-#[allow(dead_code)]
-pub fn process_xml_file_mmap<T>(
-    input_path: &Path,
-    sender: &channel::Sender<T>,
-    parse_fn: ParseFn<T>,
-) -> Result<()>
-where
-    T: Send + 'static,
-{
-    let file = File::open(input_path)?;
-    let mmap = unsafe { Mmap::map(&file)? };
-    let processed = process_chunks(&mmap[..], sender, parse_fn);
-    log::info!("Mmap chunks processed: {}", processed);
-    Ok(())
-}
-
-/// Process chunks from memory (for ZIP files)
-#[allow(dead_code)]
-pub fn process_memory_chunks<T>(
-    content: &[u8],
-    sender: &channel::Sender<T>,
-    parse_fn: ParseFn<T>,
-) -> Result<()>
-where
-    T: Send + 'static,
-{
-    let processed = process_chunks(content, sender, parse_fn);
-    log::info!("Memory chunks processed: {}", processed);
-    Ok(())
 }
 
 /// Process XML from any `Read` stream in parallel chunks without loading the
