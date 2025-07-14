@@ -3,18 +3,13 @@ use quick_xml::{
     Reader,
     events::{BytesStart, Event},
 };
-use rayon::prelude::*;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
 
 use crate::error::{AppError, Result};
 
-type ParseFn<T> = Arc<dyn Fn(&BytesStart) -> Option<T> + Send + Sync + 'static>;
+type ParseFn<T> = fn(&BytesStart) -> Option<T>;
 
 /// Target chunk size in bytes
 pub const CHUNK_SIZE: usize = 2 * 1024 * 1024;
@@ -53,42 +48,6 @@ fn find_boundary_after(data: &[u8], mut start: usize) -> Option<usize> {
     None
 }
 
-/// Find safe chunk boundaries by looking for complete XML elements.
-///
-/// The function walks through the input in roughly `CHUNK_SIZE` steps. From
-/// each tentative boundary it scans forward until it finds a closing `>` that is
-/// followed (ignoring whitespace) by the start of a new element. Splitting on
-/// these positions guarantees that no chunk begins in the middle of an XML
-/// element.
-pub fn find_chunk_boundaries(content: &[u8]) -> Vec<usize> {
-    let mut boundaries = vec![0];
-    let mut pos = 0;
-    let content_len = content.len();
-
-    while pos < content_len {
-        // Jump ahead approximately `CHUNK_SIZE` bytes from the last boundary
-        // and try to align the next chunk with the start of an element.
-        let target_pos = (pos + CHUNK_SIZE).min(content_len);
-
-        // Search for the next `>` followed by an element start. This ensures we
-        // never split inside an element.
-        if let Some(boundary_pos) = find_boundary_after(content, target_pos) {
-            if boundary_pos < content_len {
-                boundaries.push(boundary_pos);
-                pos = boundary_pos;
-                continue;
-            }
-        }
-        break;
-    }
-
-    // Always include the end of the data as the final boundary.
-    if boundaries.last() != Some(&content_len) {
-        boundaries.push(content_len);
-    }
-    boundaries
-}
-
 fn is_element_start(data: &[u8]) -> bool {
     if data.len() < 2 || data[0] != b'<' {
         return false;
@@ -97,10 +56,7 @@ fn is_element_start(data: &[u8]) -> bool {
 }
 
 /// Process a slice of XML data using a provided parser callback
-pub fn process_chunk_slice<T>(
-    chunk: &[u8],
-    parse_fn: &dyn Fn(&BytesStart) -> Option<T>,
-) -> Result<Vec<T>> {
+pub fn process_chunk_slice<T>(chunk: &[u8], parse_fn: ParseFn<T>) -> Result<Vec<T>> {
     let mut results = Vec::new();
     let mut reader = Reader::from_reader(chunk);
     reader.config_mut().trim_text(true);
@@ -119,37 +75,6 @@ pub fn process_chunk_slice<T>(
         buf.clear();
     }
     Ok(results)
-}
-
-/// Process pre-split chunks and send parsed rows
-#[allow(dead_code)]
-pub fn process_chunks<T>(data: &[u8], sender: &channel::Sender<T>, parse_fn: ParseFn<T>) -> usize
-where
-    T: Send + 'static,
-{
-    let boundaries = find_chunk_boundaries(data);
-    let processed = Arc::new(AtomicUsize::new(0));
-    boundaries
-        .windows(2)
-        .collect::<Vec<_>>()
-        .par_iter()
-        .for_each_with(
-            (
-                sender.clone(),
-                Arc::clone(&processed),
-                Arc::clone(&parse_fn),
-            ),
-            |(s, count, pf), window| {
-                let chunk = &data[window[0]..window[1]];
-                count.fetch_add(1, Ordering::Relaxed);
-                if let Ok(records) = process_chunk_slice(chunk, &**pf) {
-                    for r in records {
-                        let _ = s.send(r);
-                    }
-                }
-            },
-        );
-    processed.load(Ordering::Relaxed)
 }
 
 /// Read data from `reader` into `buffer` using a temporary slice.
@@ -176,7 +101,7 @@ fn dispatch_chunk<T>(
     T: Send + 'static,
 {
     scope.spawn(move |_| {
-        if let Ok(records) = process_chunk_slice(&chunk, &*parse_fn) {
+        if let Ok(records) = process_chunk_slice(&chunk, parse_fn) {
             for r in records {
                 let _ = sender.send(r);
             }
@@ -196,7 +121,7 @@ where
     R: Read + Send,
 {
     let mut read_buf = vec![0u8; CHUNK_SIZE];
-    let mut buffer = Vec::with_capacity(CHUNK_SIZE * 2);
+    let mut buffer = Vec::with_capacity(CHUNK_SIZE);
     let mut result: Result<()> = Ok(());
 
     rayon::scope(|scope| {
@@ -217,7 +142,7 @@ where
 
                 if let Some(boundary) = find_boundary_after(&buffer, CHUNK_SIZE) {
                     let chunk: Vec<u8> = buffer.drain(..boundary).collect();
-                    dispatch_chunk(scope, chunk, sender.clone(), Arc::clone(&parse_fn));
+                    dispatch_chunk(scope, chunk, sender.clone(), parse_fn);
                 } else {
                     break;
                 }
@@ -226,7 +151,7 @@ where
 
         if result.is_ok() && !buffer.is_empty() {
             let chunk: Vec<u8> = buffer.drain(..).collect();
-            dispatch_chunk(scope, chunk, sender.clone(), Arc::clone(&parse_fn));
+            dispatch_chunk(scope, chunk, sender.clone(), parse_fn);
         }
     });
 

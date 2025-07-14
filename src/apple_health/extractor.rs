@@ -9,7 +9,6 @@ use crossbeam_channel as channel;
 use log::error;
 use std::fs::File;
 use std::path::Path;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::task;
 
@@ -25,10 +24,10 @@ impl Extractor<GenericRecord> for AppleHealthExtractor {
         task::spawn_blocking(move || {
             let result: Result<()> = (|| {
                 if path.extension().and_then(|s| s.to_str()) == Some("zip") {
-                    xml_utils::process_zip_stream(&path, &cb_tx, Arc::new(Self::parse_generic))?;
+                    xml_utils::process_zip_stream(&path, &cb_tx, Self::parse_generic)?;
                 } else {
                     let file = File::open(&path)?;
-                    xml_utils::process_stream(file, &cb_tx, Arc::new(Self::parse_generic))?;
+                    xml_utils::process_stream(file, &cb_tx, Self::parse_generic)?;
                 }
                 Ok(())
             })();
