@@ -136,7 +136,7 @@ where
     {
         let mut mini = ZipWriter::new(&mut cursor);
         let opts = FileOptions::<()>::default()
-            .compression_method(CompressionMethod::Deflated)
+            .compression_method(CompressionMethod::Zstd)
             .unix_permissions(0o644);
         mini.start_file(format!("{}.csv", name), opts)?;
         mini.write_all(&buf)?;
