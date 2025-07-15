@@ -4,17 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-quick-xml = "0.38.0"
+quick-xml = { version = "0.38.0"}
 rayon = "1.6"
 csv = "1.1"
-zip = "4.2.0"
+zip = "4.3.0"
 crossbeam-channel = "0.5"
-memmap2 = "0.9.5"
+memmap2 = "0.9.7"
 thiserror = "2.0.12"
-clap = { version = "4.5.40", features = ["derive"] }
+clap = { version = "4.5.41", features = ["derive"] }
 log = "0.4"
 env_logger = "0.11.8"
-tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread", "fs", "sync"] }
+tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread", "fs", "sync", "io-util"] }
 async-trait = "0.1"
 
 [dev-dependencies]

@@ -1,4 +1,4 @@
-use crate::xml_utils;
+use crate::xml_utils::{self, BUFFER_SIZE};
 use quick_xml::events::BytesStart;
 
 use crate::apple_health::types::GenericRecord;
@@ -6,36 +6,30 @@ use crate::core::Extractor;
 use crate::error::Result;
 use async_trait::async_trait;
 use crossbeam_channel as channel;
-use log::error;
 use std::fs::File;
 use std::path::Path;
+use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio::task;
 
 pub struct AppleHealthExtractor;
 
 #[async_trait]
 impl Extractor<GenericRecord> for AppleHealthExtractor {
     async fn extract(&self, input_path: &Path) -> Result<mpsc::Receiver<GenericRecord>> {
-        let (tx, rx) = mpsc::channel(100);
+        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         let (cb_tx, cb_rx) = channel::unbounded();
-        let path = input_path.to_owned();
+        let path = Arc::new(input_path.to_path_buf());
 
-        task::spawn_blocking(move || {
-            let result: Result<()> = (|| {
-                if path.extension().and_then(|s| s.to_str()) == Some("zip") {
-                    xml_utils::process_zip_stream(&path, &cb_tx, Self::parse_generic)?;
-                } else {
-                    let file = File::open(&path)?;
-                    xml_utils::process_stream(file, &cb_tx, Self::parse_generic)?;
-                }
-                Ok(())
-            })();
-            drop(cb_tx);
-            if let Err(e) = result {
-                error!("Extractor thread failed: {}", e);
-            }
-        });
+        if path.extension().and_then(|s| s.to_str()) == Some("zip") {
+            tokio::spawn(xml_utils::process_zip_stream(
+                path.clone(),
+                cb_tx.clone(),
+                Self::parse_generic,
+            ));
+        } else {
+            let file = File::open(path.as_ref())?;
+            tokio::spawn(xml_utils::process_stream(file, cb_tx, Self::parse_generic));
+        }
 
         tokio::spawn(async move {
             for record in cb_rx {
