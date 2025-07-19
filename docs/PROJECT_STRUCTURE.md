@@ -17,6 +17,7 @@ This document provides an overview of the repository layout and explains the pur
 │   │   └── mod.rs        # Module declarations
 │   └── sinks/          # Output sinks for processed data
 │       ├── csv_zip.rs    # Sink writing grouped records to zipped CSV
+│       ├── csv_7z.rs     # Sink writing grouped records to 7z archives
 │       └── mod.rs
 ├── tests/              # Unit and integration tests
 │   ├── fixtures/       # Sample XML exports used by tests
@@ -35,7 +36,9 @@ The project is built around a generic transformation engine defined in `src/core
 
 - **Extractor**: `apple_health::extractor::AppleHealthExtractor` reads zipped or plain XML exports and streams `GenericRecord` values.
 - **Processable types**: Defined in `apple_health::types`, these models represent the XML elements found in the export.
-- **Sink**: `sinks::csv_zip::CsvZipSink` groups the records and writes them to Zstandard-compressed CSV files inside a ZIP archive.
+- **Sinks**:
+  - `sinks::csv_zip::CsvZipSink` writes records to compressed CSV files inside a ZIP archive.
+  - `sinks::csv_7z::Csv7zSink` writes records to compressed CSV files inside a 7z archive.
 
 The command-line interface in `src/main.rs` wires these pieces together using `Config` from `src/config.rs`. Logging and error handling are provided by `env_logger` and the custom `error` module.
 
