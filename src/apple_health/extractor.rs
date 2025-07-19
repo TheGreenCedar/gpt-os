@@ -21,14 +21,18 @@ impl Extractor<GenericRecord> for AppleHealthExtractor {
         let path = Arc::new(input_path.to_path_buf());
 
         if path.extension().and_then(|s| s.to_str()) == Some("zip") {
-            tokio::spawn(xml_utils::process_zip_stream(
+            tokio::spawn(xml_utils::process_zip_stream_parallel(
                 path.clone(),
                 cb_tx.clone(),
                 Self::parse_generic,
             ));
         } else {
             let file = File::open(path.as_ref())?;
-            tokio::spawn(xml_utils::process_stream(file, cb_tx, Self::parse_generic));
+            tokio::spawn(xml_utils::process_stream_parallel(
+                file,
+                cb_tx,
+                Self::parse_generic,
+            ));
         }
 
         tokio::spawn(async move {
