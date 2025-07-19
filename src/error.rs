@@ -14,6 +14,9 @@ pub enum AppError {
     #[error("ZIP error: {0}")]
     ZipArchiveError(#[from] zip::result::ZipError),
 
+    #[error("7z error: {0}")]
+    SevenZError(#[from] sevenz_rust::Error),
+
     #[error("Thread pool build error: {0}")]
     ThreadPoolError(#[from] rayon::ThreadPoolBuildError),
 

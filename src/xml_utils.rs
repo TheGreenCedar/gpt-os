@@ -1,6 +1,5 @@
 use crossbeam_channel as channel;
 use quick_xml::events::{BytesStart, Event};
-use rayon::prelude::*;
 use std::{path::PathBuf, sync::Arc};
 use tokio::task;
 

@@ -27,7 +27,9 @@ The entire process is asynchronous, leveraging `tokio` for concurrency and `cros
     -   `extractor.rs`: Implements the `Extractor` trait for Apple Health data (from XML or ZIP).
     -   `types.rs`: Defines `GenericRecord`, which implements the `Processable` and `CsvWritable` traits.
 -   `src/sinks/`: Contains implementations for data sinks.
-    -   `csv_zip.rs`: Implements the `Sink` trait to write records to zipped, compressed CSV files. It also defines the `CsvWritable` trait.
+    -   `csv_zip.rs`: Implements the `Sink` trait to write records to zipped, compressed CSV files.
+    -   `csv_7z.rs`: Implements the `Sink` trait to write records to 7z archives.
+        `CsvWritable` is defined in `csv_zip.rs`.
 -   `src/xml_utils.rs`: Provides streaming XML parsing utilities built on `quick-xml`.
 
 ## 4. Development Workflow
