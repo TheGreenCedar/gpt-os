@@ -9,7 +9,7 @@ Written in Rust, the project aims to provide a framework for transforming variou
 - Asynchronous XML parsing using `quick-xml` running on the Tokio runtime.
 - Memory-efficient processing with streaming and chunked buffering.
 - Built on Tokio's multi-threaded runtime for efficient concurrency.
-- Outputs structured CSV files for various health record types, all compressed using Zstandard into a single ZIP archive.
+- Outputs structured CSV files for various health record types, compressed into ZIP or 7z archives.
 - Robust error handling and logging capabilities.
 - Cross-platform compatibility (Linux, macOS, Windows).
 
@@ -32,20 +32,21 @@ gpt-os [OPTIONS] <INPUT_FILE> <OUTPUT_ZIP>
 ### Arguments
 
 - `<INPUT_FILE>`: Path to the Apple Health export (either the `export.zip` file or an already-unzipped `export.xml` file).
-- `<OUTPUT_ZIP>`: Path for the resulting ZIP archive containing the CSV files.
+- `<OUTPUT_ARCHIVE>`: Path for the resulting archive (ZIP or 7z) containing the CSV files.
 
 ### Options
 
 - `-v, --verbose`: Enable verbose logging.
 - `--no-metrics`: Disable printing of end-of-run metrics.
+- `--format <zip|7z>`: Archive format for the output (default: zip).
 - `-h, --help`: Show usage information.
 
 ### Example
 
-To process an Apple Health export and generate a ZIP file with CSV outputs:
+To process an Apple Health export and generate a ZIP (or 7z) file with CSV outputs:
 
 ```bash
-gpt-os -v export.zip my_health_data.zip
+gpt-os -v --format 7z export.zip my_health_data.7z
 ```
 
 ## Project Structure

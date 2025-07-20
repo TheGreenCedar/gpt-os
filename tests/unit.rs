@@ -146,3 +146,43 @@ fn csv_sink_sorts_records_by_date() {
     assert!(lines[1].contains("2023-01-01T00:00:00Z"));
     assert!(lines[2].contains("2023-01-02T00:00:00Z"));
 }
+
+#[test]
+fn csv_7z_sink_sorts_records_by_date() {
+    let xml1 =
+        r#"<Record type="Steps" startDate="2023-01-02T00:00:00Z" endDate="2023-01-02T00:00:00Z"/>"#;
+    let xml2 =
+        r#"<Record type="Steps" startDate="2023-01-01T00:00:00Z" endDate="2023-01-01T00:00:00Z"/>"#;
+
+    let parse = |xml: &str| {
+        let mut reader = Reader::from_str(xml);
+        reader.config_mut().trim_text(true);
+        let mut buf = Vec::new();
+        match reader.read_event_into(&mut buf).unwrap() {
+            Event::Empty(e) => GenericRecord::from_xml(&e).unwrap(),
+            _ => panic!("expected empty"),
+        }
+    };
+
+    let r1 = parse(xml1);
+    let r2 = parse(xml2);
+
+    let mut map: HashMap<String, Vec<GenericRecord>> = HashMap::new();
+    map.entry("Steps".to_string()).or_default().extend([r1, r2]);
+
+    let tmp = NamedTempFile::new().unwrap();
+    block_on(gpt_os::sinks::csv_7z::Csv7zSink.load(map, tmp.path())).unwrap();
+
+    let mut reader =
+        sevenz_rust::SevenZReader::open(tmp.path(), sevenz_rust::Password::empty()).unwrap();
+    let mut csv_data = String::new();
+    reader
+        .for_each_entries(|_entry, mut r| {
+            std::io::Read::read_to_string(&mut r, &mut csv_data).unwrap();
+            Ok(true)
+        })
+        .unwrap();
+    let lines: Vec<&str> = csv_data.lines().collect();
+    assert!(lines[1].contains("2023-01-01T00:00:00Z"));
+    assert!(lines[2].contains("2023-01-02T00:00:00Z"));
+}
