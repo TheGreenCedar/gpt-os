@@ -26,17 +26,26 @@ async fn main() {
 
     info!("🚀 Starting Apple Health Transformer");
     info!("📁 Input: {}", config.input_file);
-    info!("📦 Output: {}", config.output_zip);
+    info!("📦 Output: {}", config.output_archive);
 
     let extractor = apple_health::extractor::AppleHealthExtractor;
-    let sink = sinks::csv_zip::CsvZipSink;
-
-    let engine = core::Engine::new(extractor, sink);
 
     let input_path = Path::new(&config.input_file);
-    let output_path = Path::new(&config.output_zip);
+    let output_path = Path::new(&config.output_archive);
 
-    if let Err(e) = engine.run(input_path, output_path).await {
+    let result = match config.format {
+        config::ArchiveFormat::Zip => {
+            let sink = sinks::csv_zip::CsvZipSink;
+            let engine = core::Engine::new(extractor, sink);
+            engine.run(input_path, output_path).await
+        }
+        config::ArchiveFormat::SevenZ => {
+            let sink = sinks::csv_7z::Csv7zSink;
+            let engine = core::Engine::new(extractor, sink);
+            engine.run(input_path, output_path).await
+        }
+    };
+    if let Err(e) = result {
         error!("❌ Application error: {}", e);
         process::exit(1);
     }
@@ -53,6 +62,6 @@ async fn main() {
             "📊 Total execution time: {:.2} seconds",
             total_time.as_secs_f64()
         );
-        println!("📁 Output saved to: {}", config.output_zip);
+        println!("📁 Output saved to: {}", config.output_archive);
     }
 }
