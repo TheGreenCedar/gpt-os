@@ -17,7 +17,7 @@ pub struct AppleHealthExtractor;
 impl Extractor<GenericRecord> for AppleHealthExtractor {
     async fn extract(&self, input_path: &Path) -> Result<mpsc::Receiver<GenericRecord>> {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
-        let (cb_tx, cb_rx) = channel::unbounded();
+        let (cb_tx, cb_rx) = channel::bounded(BUFFER_SIZE);
         let path = Arc::new(input_path.to_path_buf());
 
         if path.extension().and_then(|s| s.to_str()) == Some("zip") {

@@ -1,13 +1,12 @@
 use crossbeam_channel as channel;
 use quick_xml::events::{BytesStart, Event};
-use rayon::prelude::*;
 use std::{path::PathBuf, sync::Arc};
 use tokio::task;
 
 use crate::error::{AppError, Result};
 
 pub const BUFFER_SIZE: usize = 1024 * 128; // 128 KB for L2 cache optimization
-const BATCH_SIZE: usize = 10000; // Number of records to batch for parallel processing
+const BATCH_SIZE: usize = 500; // Number of records to batch for parallel processing
 
 pub type ParseFn<T> = fn(&BytesStart) -> Option<T>;
 
