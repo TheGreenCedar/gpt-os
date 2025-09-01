@@ -68,6 +68,18 @@ cargo test
 
 The tool is designed to handle large Apple Health exports efficiently, targeting a throughput of at least 700,000 records per second (~6 to 12 months worth of data per second) on an 8-core, hyperthreaded CPU with an ssd.
 
+### CSV merge buffering
+
+Benchmarking the `(name, Cursor)` merge channel with `tests/fixtures/sample_export.xml`:
+
+| Capacity | Time (s) |
+|---------:|---------:|
+| 1        | 0.33     |
+| 4        | 0.28     |
+| unbounded | 0.32   |
+
+Buffering four mini-zips provided the best throughput without increasing memory significantly, so `bounded(4)` is used by default.
+
 ## Benchmarking
 
 The repository includes a Criterion benchmark at `benches/flamegraph.rs`.
