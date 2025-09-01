@@ -39,6 +39,10 @@ debug = false
 name = "flamegraph"
 harness = false
 
+[[bench]]
+name = "parse"
+harness = false
+
 [profile.bench]
 opt-level = 3
 debug = true

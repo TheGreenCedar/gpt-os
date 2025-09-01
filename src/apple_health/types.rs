@@ -2,30 +2,36 @@ use crate::core::Processable;
 use crate::error::{AppError, Result};
 use crate::sinks::csv_zip::CsvWritable;
 use quick_xml::events::BytesStart;
-
-// Helper function to extract string from attribute value
-fn extract_string_value(value: &[u8]) -> String {
-    String::from_utf8_lossy(value).to_string()
-}
+use std::collections::HashMap;
 
 /// Generic representation for any Apple Health XML element.
 #[derive(Debug, Clone)]
 pub struct GenericRecord {
     pub element_name: String,
-    pub attributes: std::collections::BTreeMap<String, String>,
+    pub attributes: HashMap<String, String>,
 }
 
 impl GenericRecord {
     pub fn from_xml(element: &BytesStart) -> Result<Self> {
-        let element_name = String::from_utf8_lossy(element.name().as_ref()).to_string();
-        let mut attributes = std::collections::BTreeMap::new();
+        let element_name = String::from_utf8(element.name().as_ref().to_vec())
+            .map_err(|e| AppError::ParseError(format!("Invalid element name: {}", e)))?;
+
+        let mut pairs = Vec::new();
         for attr in element.attributes() {
             let attr = attr
                 .map_err(|e| AppError::ParseError(format!("Failed to parse attribute: {}", e)))?;
-            let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
-            let value = extract_string_value(&attr.value);
-            attributes.insert(key, value);
+
+            let key = String::from_utf8(attr.key.as_ref().to_vec())
+                .map_err(|e| AppError::ParseError(format!("Invalid attribute key: {}", e)))?;
+
+            let value = String::from_utf8(attr.value.into_owned())
+                .map_err(|e| AppError::ParseError(format!("Invalid attribute value: {}", e)))?;
+
+            pairs.push((key, value));
         }
+
+        let attributes = pairs.into_iter().collect::<HashMap<_, _>>();
+
         Ok(GenericRecord {
             element_name,
             attributes,
@@ -35,7 +41,9 @@ impl GenericRecord {
 
 impl CsvWritable for GenericRecord {
     fn headers(&self) -> Vec<String> {
-        self.attributes.keys().cloned().collect()
+        let mut keys: Vec<String> = self.attributes.keys().cloned().collect();
+        keys.sort();
+        keys
     }
 
     fn write<W: std::io::Write>(
