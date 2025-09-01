@@ -1,6 +1,6 @@
 use crossbeam_channel as channel;
 use quick_xml::events::{BytesStart, Event};
-use rayon::ThreadPool;
+use rayon::{ThreadPool, prelude::*};
 use std::{
     path::PathBuf,
     sync::{Arc, OnceLock},
@@ -11,6 +11,7 @@ use crate::error::{AppError, Result};
 
 pub const BUFFER_SIZE: usize = 1024 * 128; // 128 KB for L2 cache optimization
 const BATCH_SIZE: usize = 500; // Number of records to batch for parallel processing
+const CHUNK_SIZE: usize = 50; // Size of parallel chunks within each batch
 
 pub type ParseFn<T> = fn(&BytesStart) -> Option<T>;
 
@@ -61,14 +62,16 @@ where
 
                 let current_batch = std::mem::take(&mut batch);
                 let sender_clone = sender.clone();
-                pool.spawn(move || {
-                    let records: Vec<T> =
-                        current_batch.iter().filter_map(|e| parse_fn(e)).collect();
-                    for record in records {
-                        if sender_clone.send(record).is_err() {
-                            break;
+                pool.install(|| {
+                    current_batch.par_chunks(CHUNK_SIZE).for_each(|chunk| {
+                        for e in chunk {
+                            if let Some(record) = parse_fn(e) {
+                                if sender_clone.send(record).is_err() {
+                                    break;
+                                }
+                            }
                         }
-                    }
+                    });
                 });
             }
             Ok(Event::Eof) => break,
@@ -81,13 +84,16 @@ where
     // Process the final partial batch
     if !batch.is_empty() {
         let sender_clone = sender.clone();
-        pool.spawn(move || {
-            let records: Vec<T> = batch.iter().filter_map(|e| parse_fn(e)).collect();
-            for record in records {
-                if sender_clone.send(record).is_err() {
-                    break;
+        pool.install(|| {
+            batch.par_chunks(CHUNK_SIZE).for_each(|chunk| {
+                for e in chunk {
+                    if let Some(record) = parse_fn(e) {
+                        if sender_clone.send(record).is_err() {
+                            break;
+                        }
+                    }
                 }
-            }
+            });
         });
     }
 
