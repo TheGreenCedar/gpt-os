@@ -21,7 +21,7 @@ pub trait Processable: Send + Sync + Debug + 'static {
 /// Extracts records from a data source into a channel.
 #[async_trait]
 pub trait Extractor<T: Processable> {
-    async fn extract(&self, input_path: &Path) -> Result<mpsc::Receiver<T>>;
+    async fn extract(&self, input_path: &Path) -> Result<mpsc::Receiver<Result<T>>>;
 }
 
 /// Loads grouped records into a data sink.
@@ -78,7 +78,7 @@ where
         // Transform phase
         let transform_start = Instant::now();
         info!("Starting transformation phase...");
-        let grouped_records = transformer::transform(receiver).await;
+        let grouped_records = transformer::transform(receiver).await?;
         let transform_duration = transform_start.elapsed();
 
         let total_records: usize = grouped_records.values().map(Vec::len).sum();
@@ -123,17 +123,21 @@ where
 
 mod transformer {
     use super::Processable;
+    use crate::error::Result;
     use log::{debug, info};
     use std::collections::HashMap;
     use std::time::Instant;
     use tokio::sync::mpsc::Receiver;
 
-    pub async fn transform<T: Processable>(mut receiver: Receiver<T>) -> HashMap<String, Vec<T>> {
+    pub async fn transform<T: Processable>(
+        mut receiver: Receiver<Result<T>>,
+    ) -> Result<HashMap<String, Vec<T>>> {
         let start_time = Instant::now();
         let mut grouped_records: HashMap<String, Vec<T>> = HashMap::new();
         let mut total_processed = 0usize;
 
-        while let Some(record) = receiver.recv().await {
+        while let Some(result) = receiver.recv().await {
+            let record = result?;
             grouped_records
                 .entry(record.grouping_key())
                 .or_default()
@@ -156,6 +160,6 @@ mod transformer {
             );
         }
 
-        grouped_records
+        Ok(grouped_records)
     }
 }
