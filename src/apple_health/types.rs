@@ -40,20 +40,18 @@ impl GenericRecord {
 }
 
 impl CsvWritable for GenericRecord {
-    fn headers(&self) -> Vec<String> {
-        let mut keys: Vec<String> = self.attributes.keys().cloned().collect();
-        keys.sort();
-        keys
+    fn header_keys(&self) -> impl Iterator<Item = &str> {
+        self.attributes.keys().map(String::as_str)
     }
 
     fn write<W: std::io::Write>(
         &self,
         writer: &mut csv::Writer<W>,
-        headers: &[String],
+        headers: &[&str],
     ) -> csv::Result<()> {
         let record: Vec<&str> = headers
             .iter()
-            .map(|h| self.attributes.get(h).map(String::as_str).unwrap_or(""))
+            .map(|h| self.attributes.get(*h).map(String::as_str).unwrap_or(""))
             .collect();
         writer.write_record(&record)
     }
