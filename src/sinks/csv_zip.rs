@@ -126,7 +126,7 @@ where
 {
     use std::collections::BTreeSet;
 
-    recs.sort_by_key(|r| r.sort_key().unwrap_or_default());
+    recs.sort_by(|a, b| a.sort_key().unwrap_or("").cmp(b.sort_key().unwrap_or("")));
 
     // build CSV in memory
     let mut buf = Vec::with_capacity(recs.len() * 100);

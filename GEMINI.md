@@ -11,7 +11,7 @@ This document provides essential information about the `gpt-os` repository to en
 The application follows a classic ETL pattern orchestrated by the `Engine` in `src/core.rs`.
 
 -   **`Extractor<T>` trait**: Responsible for reading data from a source (e.g., a file) and streaming it as `Processable` records. The primary implementation is `AppleHealthExtractor`.
--   **`Processable` trait**: Represents a single data record. It requires a `grouping_key()` (e.g., "HeartRate", "Steps") which the engine uses to group records. It can also have an optional `sort_key()`.
+-   **`Processable` trait**: Represents a single data record. It requires a `grouping_key()` (e.g., "HeartRate", "Steps") which the engine uses to group records. It can also have an optional `sort_key()` that returns a borrowed string for ordering within groups.
 -   **`Engine`**: The core orchestrator. It takes an `Extractor` and a `Sink`, receives the stream of records from the extractor, groups them by the `grouping_key` in a concurrent map, and then passes the grouped data to the `Sink`.
 -   **`Sink<T>` trait**: Responsible for loading the grouped records into a destination. The primary implementation is `CsvZipSink`, which writes data into compressed CSV files within a ZIP archive.
 
