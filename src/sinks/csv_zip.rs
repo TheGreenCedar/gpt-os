@@ -16,10 +16,10 @@ use zip::{CompressionMethod, ZipWriter, write::FileOptions};
 /// Trait for writing records to a CSV writer using dynamic headers.
 pub trait CsvWritable {
     /// Return the attribute keys used for CSV headers.
-    fn headers(&self) -> Vec<String>;
+    fn header_keys(&self) -> impl Iterator<Item = &str>;
 
     /// Write the record using the provided header ordering.
-    fn write<W: Write>(&self, writer: &mut csv::Writer<W>, headers: &[String]) -> csv::Result<()>;
+    fn write<W: Write>(&self, writer: &mut csv::Writer<W>, headers: &[&str]) -> csv::Result<()>;
 }
 
 pub struct CsvZipSink;
@@ -131,11 +131,11 @@ where
     // build CSV in memory
     let mut buf = Vec::with_capacity(recs.len() * 100);
     {
-        let mut header_set = BTreeSet::new();
+        let mut header_set: BTreeSet<&str> = BTreeSet::new();
         for r in &*recs {
-            header_set.extend(r.headers());
+            header_set.extend(r.header_keys());
         }
-        let headers: Vec<String> = header_set.into_iter().collect();
+        let headers: Vec<&str> = header_set.into_iter().collect();
 
         let mut w = csv::WriterBuilder::new()
             .has_headers(true)
