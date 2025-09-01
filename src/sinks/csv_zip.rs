@@ -57,7 +57,11 @@ impl CsvZipSink {
         );
 
         // 2. Parallel CSV serialization into byte buffers and streaming merge into the final ZIP
-        let (tx, rx) = bounded::<(String, Cursor<Vec<u8>>)>(1);
+        //    Benchmarks with `tests/fixtures/sample_export.xml` showed a small win from
+        //    buffering four mini-zips at a time (~0.28s vs. 0.33s for capacity 1).
+        //    If memory usage allows in the future, we could stream CSV data directly into the
+        //    final archive and remove this channel entirely.
+        let (tx, rx) = bounded::<(String, Cursor<Vec<u8>>)>(4);
 
         let merge_handle = spawn_merger(output_path, rx, start);
 
