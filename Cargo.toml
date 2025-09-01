@@ -4,25 +4,25 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-quick-xml = { version = "0.38.0"}
-rayon = "1.6"
-csv = "1.1"
-zip = "4.3.0"
-crossbeam-channel = "0.5"
-memmap2 = "0.9.7"
-thiserror = "2.0.12"
-clap = { version = "4.5.41", features = ["derive"] }
-log = "0.4"
+quick-xml = { version = "0.38.3"}
+rayon = "1.11.0"
+csv = "1.3.1"
+zip = "4.6.0"
+crossbeam-channel = "0.5.15"
+memmap2 = "0.9.8"
+thiserror = "2.0.16"
+clap = { version = "4.5.46", features = ["derive"] }
+log = "0.4.27"
 env_logger = "0.11.8"
-tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread", "fs", "sync", "io-util"] }
-async-trait = "0.1"
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "fs", "sync", "io-util"] }
+async-trait = "0.1.89"
 
 [dev-dependencies]
-quick-xml = "0.38.0"
-tempfile = "3.20.0"
+quick-xml = "0.38.3"
+tempfile = "3.21.0"
 assert_cmd = "2.0.17"
-criterion = { version = "0.6", features = ["html_reports"] }
-tokio-test = "0.4"
+criterion = { version = "0.7.0", features = ["html_reports"] }
+tokio-test = "0.4.4"
 
 # Profile configuration to optimize dependencies even in debug builds
 [profile.dev]
