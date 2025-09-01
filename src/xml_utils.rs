@@ -1,6 +1,10 @@
 use crossbeam_channel as channel;
 use quick_xml::events::{BytesStart, Event};
-use std::{path::PathBuf, sync::Arc};
+use rayon::ThreadPool;
+use std::{
+    path::PathBuf,
+    sync::{Arc, OnceLock},
+};
 use tokio::task;
 
 use crate::error::{AppError, Result};
@@ -10,11 +14,27 @@ const BATCH_SIZE: usize = 500; // Number of records to batch for parallel proces
 
 pub type ParseFn<T> = fn(&BytesStart) -> Option<T>;
 
+static THREAD_POOL: OnceLock<ThreadPool> = OnceLock::new();
+
+pub fn get_thread_pool() -> Result<&'static ThreadPool> {
+    if let Some(pool) = THREAD_POOL.get() {
+        return Ok(pool);
+    }
+
+    let pool = rayon::ThreadPoolBuilder::new()
+        .build()
+        .map_err(AppError::ThreadPoolError)?;
+
+    let _ = THREAD_POOL.set(pool);
+    Ok(THREAD_POOL.get().expect("thread pool set"))
+}
+
 /// Parallel XML processing logic using a batched streaming approach.
 fn process_xml_reader_parallel<T, R>(
     reader: R,
     sender: channel::Sender<T>,
     parse_fn: ParseFn<T>,
+    pool: &ThreadPool,
 ) -> Result<()>
 where
     T: Send + 'static,
@@ -25,8 +45,6 @@ where
     xml_reader.config_mut().trim_text(true);
     let mut buf = Vec::with_capacity(BUFFER_SIZE);
     let mut batch = Vec::with_capacity(BATCH_SIZE);
-
-    let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
 
     loop {
         match xml_reader.read_event_into(&mut buf) {
@@ -85,7 +103,8 @@ where
     T: Send + 'static,
     R: std::io::Read + Send + 'static,
 {
-    task::spawn_blocking(move || process_xml_reader_parallel(reader, sender, parse_fn))
+    let pool = get_thread_pool()?;
+    task::spawn_blocking(move || process_xml_reader_parallel(reader, sender, parse_fn, pool))
         .await
         .map_err(|e| AppError::Unknown(e.to_string()))?
 }
@@ -99,6 +118,7 @@ pub async fn process_zip_stream_parallel<T>(
 where
     T: Send + 'static,
 {
+    let pool = get_thread_pool()?;
     let file = std::fs::File::open(input_path.as_ref())?;
     let mut archive = zip::ZipArchive::new(file)?;
     let export_file_name = archive
@@ -109,7 +129,7 @@ where
     if let Some(name) = export_file_name {
         task::spawn_blocking(move || -> Result<()> {
             let export_file = archive.by_name(&name)?;
-            process_xml_reader_parallel(export_file, sender, parse_fn)
+            process_xml_reader_parallel(export_file, sender, parse_fn, pool)
         })
         .await
         .map_err(|e| AppError::Unknown(e.to_string()))?
