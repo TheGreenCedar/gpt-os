@@ -131,6 +131,9 @@ fn csv_sink_sorts_records_by_date() {
     let r1 = parse(xml1);
     let r2 = parse(xml2);
 
+    assert_eq!(r1.sort_key(), Some("2023-01-02T00:00:00Z"));
+    assert_eq!(r2.sort_key(), Some("2023-01-01T00:00:00Z"));
+
     let mut map: HashMap<String, Vec<GenericRecord>> = HashMap::new();
     map.entry("Steps".to_string()).or_default().extend([r1, r2]);
 

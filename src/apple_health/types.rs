@@ -61,7 +61,7 @@ impl Processable for GenericRecord {
         self.element_name.clone()
     }
 
-    fn sort_key(&self) -> Option<String> {
+    fn sort_key(&self) -> Option<&str> {
         let keys = [
             "startDate",
             "date",
@@ -73,7 +73,7 @@ impl Processable for GenericRecord {
         ];
         for k in keys {
             if let Some(v) = self.attributes.get(k) {
-                return Some(v.clone());
+                return Some(v.as_str());
             }
         }
         None

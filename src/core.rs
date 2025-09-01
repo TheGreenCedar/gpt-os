@@ -13,7 +13,7 @@ pub trait Processable: Send + Sync + Debug + 'static {
     fn grouping_key(&self) -> String;
 
     /// Optional key used for ordering records within groups.
-    fn sort_key(&self) -> Option<String> {
+    fn sort_key(&self) -> Option<&str> {
         None
     }
 }
