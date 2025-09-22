@@ -1,9 +1,9 @@
 use crate::core::{Processable, Sink};
 use crate::error::{AppError, Result};
+use ahash::AHashMap;
 use crossbeam_channel::{Receiver, bounded};
 use log::{debug, info, warn};
 use rayon::prelude::*;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Cursor, Write};
 use std::path::Path;
@@ -31,7 +31,7 @@ where
 {
     async fn load(
         &self,
-        grouped_records: HashMap<String, Vec<T>>,
+        grouped_records: AHashMap<String, Vec<T>>,
         output_path: &Path,
     ) -> Result<()> {
         let out = output_path.to_owned();
@@ -42,7 +42,7 @@ where
 }
 
 impl CsvZipSink {
-    fn load_sync<T>(grouped_records: HashMap<String, Vec<T>>, output_path: &Path) -> Result<()>
+    fn load_sync<T>(grouped_records: AHashMap<String, Vec<T>>, output_path: &Path) -> Result<()>
     where
         T: Processable + CsvWritable + Send + Sync + 'static,
     {
@@ -81,7 +81,7 @@ impl CsvZipSink {
     }
 }
 
-fn filter_entries<T>(grouped_records: HashMap<String, Vec<T>>) -> Vec<(String, Vec<T>)>
+fn filter_entries<T>(grouped_records: AHashMap<String, Vec<T>>) -> Vec<(String, Vec<T>)>
 where
     T: Processable + CsvWritable,
 {
@@ -126,7 +126,7 @@ where
 {
     use std::collections::BTreeSet;
 
-    recs.sort_by(|a, b| a.sort_key().unwrap_or("").cmp(b.sort_key().unwrap_or("")));
+    recs.sort_by_cached_key(|r| r.sort_key().map(str::to_owned).unwrap_or_default());
 
     // build CSV in memory
     let mut buf = Vec::with_capacity(recs.len() * 100);

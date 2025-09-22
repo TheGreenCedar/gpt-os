@@ -1,9 +1,9 @@
+use ahash::AHashMap;
 use gpt_os::apple_health::types::GenericRecord;
 use gpt_os::core::{Processable, Sink};
 use gpt_os::sinks::csv_zip::CsvZipSink;
 use quick_xml::Reader;
 use quick_xml::events::Event;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use tempfile::NamedTempFile;
@@ -134,7 +134,7 @@ fn csv_sink_sorts_records_by_date() {
     assert_eq!(r1.sort_key(), Some("2023-01-02T00:00:00Z"));
     assert_eq!(r2.sort_key(), Some("2023-01-01T00:00:00Z"));
 
-    let mut map: HashMap<String, Vec<GenericRecord>> = HashMap::new();
+    let mut map: AHashMap<String, Vec<GenericRecord>> = AHashMap::new();
     map.entry("Steps".to_string()).or_default().extend([r1, r2]);
 
     let tmp = NamedTempFile::new().unwrap();
