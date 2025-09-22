@@ -1,14 +1,14 @@
 use crate::core::Processable;
 use crate::error::{AppError, Result};
 use crate::sinks::csv_zip::CsvWritable;
+use ahash::AHashMap;
 use quick_xml::events::BytesStart;
-use std::collections::HashMap;
 
 /// Generic representation for any Apple Health XML element.
 #[derive(Debug, Clone)]
 pub struct GenericRecord {
     pub element_name: String,
-    pub attributes: HashMap<String, String>,
+    pub attributes: AHashMap<String, String>,
 }
 
 impl GenericRecord {
@@ -16,8 +16,11 @@ impl GenericRecord {
         let element_name = String::from_utf8(element.name().as_ref().to_vec())
             .map_err(|e| AppError::ParseError(format!("Invalid element name: {}", e)))?;
 
-        let mut pairs = Vec::new();
-        for attr in element.attributes() {
+        let attributes_iter = element.attributes();
+        let (lower, _) = attributes_iter.size_hint();
+        let mut attributes = AHashMap::with_capacity(lower);
+
+        for attr in attributes_iter {
             let attr = attr
                 .map_err(|e| AppError::ParseError(format!("Failed to parse attribute: {}", e)))?;
 
@@ -27,10 +30,8 @@ impl GenericRecord {
             let value = String::from_utf8(attr.value.into_owned())
                 .map_err(|e| AppError::ParseError(format!("Invalid attribute value: {}", e)))?;
 
-            pairs.push((key, value));
+            attributes.insert(key, value);
         }
-
-        let attributes = pairs.into_iter().collect::<HashMap<_, _>>();
 
         Ok(GenericRecord {
             element_name,
