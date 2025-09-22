@@ -40,7 +40,7 @@ where
     T: Send + 'static,
     R: std::io::Read,
 {
-    let buf_reader = std::io::BufReader::new(reader);
+    let buf_reader = std::io::BufReader::with_capacity(BUFFER_SIZE, reader);
     let mut xml_reader = quick_xml::reader::Reader::from_reader(buf_reader);
     xml_reader.config_mut().trim_text(true);
     let mut buf = Vec::with_capacity(BUFFER_SIZE);
@@ -62,11 +62,11 @@ where
                 let current_batch = std::mem::take(&mut batch);
                 let sender_clone = sender.clone();
                 pool.spawn(move || {
-                    let records: Vec<T> =
-                        current_batch.iter().filter_map(|e| parse_fn(e)).collect();
-                    for record in records {
-                        if sender_clone.send(record).is_err() {
-                            break;
+                    for event in &current_batch {
+                        if let Some(record) = parse_fn(event) {
+                            if sender_clone.send(record).is_err() {
+                                break;
+                            }
                         }
                     }
                 });
@@ -82,10 +82,11 @@ where
     if !batch.is_empty() {
         let sender_clone = sender.clone();
         pool.spawn(move || {
-            let records: Vec<T> = batch.iter().filter_map(|e| parse_fn(e)).collect();
-            for record in records {
-                if sender_clone.send(record).is_err() {
-                    break;
+            for event in &batch {
+                if let Some(record) = parse_fn(event) {
+                    if sender_clone.send(record).is_err() {
+                        break;
+                    }
                 }
             }
         });
