@@ -1,7 +1,7 @@
 use crate::error::Result;
+use ahash::AHashMap;
 use async_trait::async_trait;
 use log::{debug, info};
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::Path;
 use std::time::Instant;
@@ -29,7 +29,7 @@ pub trait Extractor<T: Processable> {
 pub trait Sink<T: Processable> {
     async fn load(
         &self,
-        grouped_records: HashMap<String, Vec<T>>,
+        grouped_records: AHashMap<String, Vec<T>>,
         output_path: &Path,
     ) -> Result<()>;
 }
@@ -124,16 +124,16 @@ where
 mod transformer {
     use super::Processable;
     use crate::error::Result;
+    use ahash::AHashMap;
     use log::{debug, info};
-    use std::collections::HashMap;
     use std::time::Instant;
     use tokio::sync::mpsc::Receiver;
 
     pub async fn transform<T: Processable>(
         mut receiver: Receiver<Result<T>>,
-    ) -> Result<HashMap<String, Vec<T>>> {
+    ) -> Result<AHashMap<String, Vec<T>>> {
         let start_time = Instant::now();
-        let mut grouped_records: HashMap<String, Vec<T>> = HashMap::new();
+        let mut grouped_records: AHashMap<String, Vec<T>> = AHashMap::new();
         let mut total_processed = 0usize;
 
         while let Some(result) = receiver.recv().await {
