@@ -1,17 +1,20 @@
 use crate::core::{Processable, Sink};
 use crate::error::{AppError, Result};
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use crossbeam_channel::{Receiver, bounded};
 use log::{debug, info, warn};
 use rayon::prelude::*;
 use std::fs::File;
 use std::io::{Cursor, Write};
+use std::mem::MaybeUninit;
 use std::path::Path;
 use std::thread;
 use std::time::Instant;
 use tokio::task;
 use zip::ZipArchive;
 use zip::{CompressionMethod, ZipWriter, write::FileOptions};
+
+const STORE_THRESHOLD: usize = 8 * 1024;
 
 /// Trait for writing records to a CSV writer using dynamic headers.
 pub trait CsvWritable {
@@ -61,7 +64,8 @@ impl CsvZipSink {
         //    buffering four mini-zips at a time (~0.28s vs. 0.33s for capacity 1).
         //    If memory usage allows in the future, we could stream CSV data directly into the
         //    final archive and remove this channel entirely.
-        let (tx, rx) = bounded::<(String, Cursor<Vec<u8>>)>(4);
+        let queue_capacity = (rayon::current_num_threads().saturating_mul(2)).max(4);
+        let (tx, rx) = bounded::<(String, Cursor<Vec<u8>>)>(queue_capacity);
 
         let merge_handle = spawn_merger(output_path, rx, start);
 
@@ -124,42 +128,95 @@ fn create_mini_zip<T>(name: &str, recs: &mut [T]) -> Result<Cursor<Vec<u8>>>
 where
     T: Processable + CsvWritable,
 {
-    use std::collections::BTreeSet;
+    let mut has_sort_keys = false;
+    let sort_keys: Vec<Option<&str>> = recs
+        .iter()
+        .map(|r| {
+            let key = r.sort_key();
+            if key.is_some() {
+                has_sort_keys = true;
+            }
+            key
+        })
+        .collect();
+    if has_sort_keys {
+        let mut indices: Vec<usize> = (0..recs.len()).collect();
+        indices.sort_unstable_by_key(|&idx| sort_keys[idx]);
+        drop(sort_keys);
+        reorder_by_indices(recs, &indices);
+    }
 
-    recs.sort_by_cached_key(|r| r.sort_key().map(str::to_owned).unwrap_or_default());
+    // Determine dynamic headers once per file
+    let mut header_set: AHashSet<&str> = AHashSet::new();
+    for r in &*recs {
+        header_set.extend(r.header_keys());
+    }
+    let mut headers: Vec<&str> = header_set.into_iter().collect();
+    headers.sort_unstable();
 
-    // build CSV in memory
-    let mut buf = Vec::with_capacity(recs.len() * 100);
+    let mut csv_buf = Vec::with_capacity(recs.len().saturating_mul(headers.len().max(1) * 8));
     {
-        let mut header_set: BTreeSet<&str> = BTreeSet::new();
-        for r in &*recs {
-            header_set.extend(r.header_keys());
-        }
-        let headers: Vec<&str> = header_set.into_iter().collect();
-
         let mut w = csv::WriterBuilder::new()
             .has_headers(true)
-            .from_writer(&mut buf);
+            .buffer_capacity(128 * 1024)
+            .from_writer(&mut csv_buf);
         w.write_record(&headers)?;
         for r in &*recs {
             r.write(&mut w, &headers)?;
         }
         w.flush()?;
     }
-    debug!("CSV for '{}' is {} bytes", name, buf.len());
+    debug!("CSV for '{}' is {} bytes", name, csv_buf.len());
 
-    // wrap in a 1-entry ZIP
-    let mut cursor = Cursor::new(Vec::with_capacity(buf.len() / 3));
+    let mut cursor = Cursor::new(Vec::with_capacity(csv_buf.len() / 3 + 256));
     {
         let mut mini = ZipWriter::new(&mut cursor);
-        let opts = FileOptions::<()>::default()
-            .compression_method(CompressionMethod::Deflated)
-            .compression_level(Some(2))
+        let (method, level) = if csv_buf.len() < STORE_THRESHOLD {
+            (CompressionMethod::Stored, None)
+        } else {
+            (CompressionMethod::Deflated, Some(1))
+        };
+        let mut opts = FileOptions::<()>::default()
+            .compression_method(method)
             .unix_permissions(0o644);
+        if let Some(level) = level {
+            opts = opts.compression_level(Some(level));
+        }
         mini.start_file(format!("{}.csv", name), opts)?;
-        mini.write_all(&buf)?;
+        mini.write_all(&csv_buf)?;
         mini.finish()?;
     }
+    debug!(
+        "Compressed CSV for '{}' is {} bytes",
+        name,
+        cursor.get_ref().len()
+    );
     cursor.set_position(0);
     Ok(cursor)
+}
+
+fn reorder_by_indices<T>(items: &mut [T], order: &[usize]) {
+    debug_assert_eq!(items.len(), order.len());
+    if items.len() <= 1 {
+        return;
+    }
+
+    let len = items.len();
+    let mut tmp: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
+    unsafe {
+        tmp.set_len(len);
+    }
+
+    let base_ptr = items.as_mut_ptr();
+    for (slot, &src_index) in tmp.iter_mut().zip(order.iter()) {
+        unsafe {
+            slot.as_mut_ptr().write(base_ptr.add(src_index).read());
+        }
+    }
+
+    for (index, slot) in tmp.into_iter().enumerate() {
+        unsafe {
+            base_ptr.add(index).write(slot.assume_init());
+        }
+    }
 }
